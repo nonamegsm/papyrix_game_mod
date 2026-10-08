@@ -25,13 +25,16 @@ basket input (including a repeated tap on the same position). Switch back to
 **Pace: Slow** to resume automatic movement. The pace setting is shared by these three games
 for the current session. Timers stop while the game is paused.
 
-On the X4 Pro, use the four direction pads above the bottom button bar. The
+On the X4 Pro, 2048, Snake, and Falling Blocks show **Left | Down | Right**
+above the bottom button bar. **Down** spans the middle half of the screen,
+twice the touch width of either side button. Use the top screen margin or
+physical Up button for Up (rotation in Falling Blocks). The
 bottom bar also provides Games, Menu, Left, and Right controls. In the pause
 menu, tap an item to select it.
 
 You can also tap the **top, bottom, left, or right margin** of the game screen
 to send Up, Down, Left, or Right. The bottom margin is the strip immediately
-above the direction pads. These edge controls are active only during gameplay;
+above the touch pads. These edge controls are active only during gameplay;
 the direction pads, footer, game chooser, and pause menu keep their normal
 controls. Top/bottom take priority at corners. In Falling Blocks, the top edge
 rotates and the bottom edge lowers the piece, just like the direction buttons.

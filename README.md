@@ -5,7 +5,9 @@ based on PapyriX **v1.31.0**, adds offline **2048**, **Snake**, **Falling Blocks
 to **Apps > Games**. It includes pause/restart controls, slow and turn-based play,
 physical-button controls, and touch controls for the X4 Pro. During a game,
 tap the top, bottom, left, or right screen edge for directional input, or use
-the existing on-screen direction pads. Nu, Pogodi! adds four basket positions,
+the **Left | Down | Right** touch pads, with a wider Down button in the middle.
+Up remains available from the top edge and physical button.
+Nu, Pogodi! adds four basket positions,
 direct chute taps, egg-catching scores, and a three-miss game-over rule.
 
 The mod also includes a **Barcode** app with on-screen entry for **Code 128**
@@ -24,6 +26,14 @@ portrait and landscape. The Nu, Pogodi! guide includes its basket controls and
 slow/turn-based modes.
 
 The project retains the upstream MIT license and documentation below.
+
+## Directional touch controls
+
+2048, Snake, and Falling Blocks use **Left | Down | Right**. The centre
+Down target is twice as wide as either side target; Up uses the top screen
+margin or physical button. This host preview uses illustrative fonts.
+
+<img src="docs/images/game-mod/left-down-right-preview.png" width="240" alt="Falling Blocks host preview with Left, double-width Down, and Right touch buttons">
 
 ## Nu, Pogodi! screen previews
 
@@ -55,6 +65,7 @@ The Code 128, EAN-13, and QR symbols shown here were decoded independently.
 ## Photos on X4 Pro
 
 Photos of the mod running on an Xteink X4 Pro, with the surrounding background removed.
+These earlier photos show the original four-button directional layout.
 
 | Apps menu | Games chooser |
 | :---: | :---: |
@@ -146,7 +157,7 @@ devices does not reuse incompatible rendered pages.
 - [x] 4 screen orientations
 
 ### Games
-- [x] Offline games: 2048, Snake, and Falling Blocks, with button and X4 Pro touch controls ([controls](docs/games.md))
+- [x] Offline games: 2048, Snake, Falling Blocks, and Nu, Pogodi!, with button and X4 Pro touch controls ([controls](docs/games.md))
 
 ### Barcode and QR Codes
 - [x] Code 128 and EAN-13 entry through the on-screen keyboard

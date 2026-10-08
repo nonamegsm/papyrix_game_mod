@@ -65,6 +65,12 @@ bool hasDrawnText(const std::string& expected) {
                      [&](const GfxRenderer::TextCall& call) { return call.text.find(expected) != std::string::npos; });
 }
 
+bool hasExactDrawnText(const std::string& expected) {
+  const auto& calls = renderer.textCalls();
+  return std::any_of(calls.begin(), calls.end(),
+                     [&](const GfxRenderer::TextCall& call) { return call.text == expected; });
+}
+
 void resetApp(Core& core, unsigned long now = 100) {
   testSetManualMillis(now);
   core.settings = Settings{};
@@ -132,6 +138,20 @@ bool rectsStayOnScreen(const std::vector<GfxRenderer::RectCall>& rects) {
   return true;
 }
 
+std::vector<GfxRenderer::RectCall> controlRects() {
+  std::vector<GfxRenderer::RectCall> rects;
+  const int y = renderer.getScreenHeight() - 50 - 72 + 4;
+  for (const auto& rect : renderer.drawRects()) {
+    if (rect.y == y && rect.h == 64) rects.push_back(rect);
+  }
+  return rects;
+}
+
+bool hasWideMiddleControl(const std::vector<GfxRenderer::RectCall>& rects) {
+  if (rects.size() != 3) return false;
+  return rects[1].w >= rects[0].w * 2 - 8 && rects[1].w >= rects[2].w * 2 - 8;
+}
+
 bool linesStayOnScreen(const std::vector<GfxRenderer::LineCall>& lines) {
   for (const auto& line : lines) {
     if (line.x0 < 0 || line.x1 < 0 || line.y0 < 0 || line.y1 < 0) return false;
@@ -192,7 +212,7 @@ std::vector<GfxRenderer::RectCall> fallingRectsAfterInput(Core& core, Event inpu
   startSelectedGame(core, 2);
   handleEvent(core, input);
   renderFresh(core);
-  return renderer.fillRects();
+  return renderer.drawRects();
 }
 
 void setEggPace(Core& core, bool turnBased, unsigned long now = 100) {
@@ -355,6 +375,10 @@ void exportScreens(Core& core, const char* outputPath) {
     update(core);
     renderFresh(core);
     frames.push_back(captureFrame((std::string("nu-pogodi-paused-") + size.name).c_str()));
+
+    startSelectedGame(core, 2);
+    renderFresh(core);
+    frames.push_back(captureFrame((std::string("falling-blocks-controls-") + size.name).c_str()));
   }
   writeFramesJson(frames, outputPath);
 }
@@ -510,9 +534,32 @@ int main(int argc, char** argv) {
   }
 
   {
+    const auto noInputRects = fallingRectsAfterInput(core, Event::none());
     const auto buttonUpRects = fallingRectsAfterInput(core, press(Button::Up));
     const auto topEdgeRects = fallingRectsAfterInput(core, tapTopEdge());
     runner.expectTrue(rectsEqual(buttonUpRects, topEdgeRects), "falling blocks top edge matches up-button rotation");
+
+    const auto buttonLeftRects = fallingRectsAfterInput(core, press(Button::Left));
+    const auto leftPadRects = fallingRectsAfterInput(core, tapDpad(0));
+    runner.expectFalse(rectsEqual(noInputRects, buttonLeftRects),
+                       "falling blocks physical left changes active outline");
+    runner.expectTrue(rectsEqual(buttonLeftRects, leftPadRects), "falling blocks left pad matches left button");
+
+    const auto buttonDownRects = fallingRectsAfterInput(core, press(Button::Down));
+    const auto downLeftHalfRects = fallingRectsAfterInput(core, tapDpad(1));
+    const auto downRightHalfRects = fallingRectsAfterInput(core, tapDpad(2));
+    runner.expectFalse(rectsEqual(noInputRects, buttonDownRects),
+                       "falling blocks physical down changes active outline");
+    runner.expectTrue(rectsEqual(buttonDownRects, downLeftHalfRects),
+                      "falling blocks left half of down pad matches down button");
+    runner.expectTrue(rectsEqual(buttonDownRects, downRightHalfRects),
+                      "falling blocks right half of down pad matches down button");
+
+    const auto buttonRightRects = fallingRectsAfterInput(core, press(Button::Right));
+    const auto rightPadRects = fallingRectsAfterInput(core, tapDpad(3));
+    runner.expectFalse(rectsEqual(noInputRects, buttonRightRects),
+                       "falling blocks physical right changes active outline");
+    runner.expectTrue(rectsEqual(buttonRightRects, rightPadRects), "falling blocks right pad matches right button");
   }
 
   {
@@ -565,13 +612,36 @@ int main(int argc, char** argv) {
 
   {
     startSelectedGame(core, 1);
-    runner.expectTrue(handleEvent(core, tapDpad(0)), "playing touch dpad up is consumed");
+    runner.expectTrue(handleEvent(core, tapDpad(0)), "playing touch dpad left is consumed");
   }
 
   {
     startSelectedGame(core, 2);
     runner.expectTrue(handleEvent(core, tapDpad(1)), "playing touch dpad down is consumed");
   }
+
+  {
+    startSelectedGame(core, 2);
+    renderFresh(core);
+    const auto controls = controlRects();
+    runner.expectTrue(hasExactDrawnText("Left"), "generic game controls render left label");
+    runner.expectTrue(hasExactDrawnText("Down"), "generic game controls render down label");
+    runner.expectTrue(hasExactDrawnText("Right"), "generic game controls render right label");
+    runner.expectFalse(hasExactDrawnText("Up"), "generic game controls do not render an up pad");
+    runner.expectEq<size_t>(3, controls.size(), "generic game controls render three touch pads");
+    runner.expectTrue(hasWideMiddleControl(controls), "generic game down control is visibly twice as wide");
+  }
+
+  for (const auto& size : kScreenSizes) {
+    renderer.setScreenSize(size.width, size.height);
+    startSelectedGame(core, 2);
+    renderFresh(core);
+    const auto controls = controlRects();
+    runner.expectEq<size_t>(3, controls.size(), testName("generic control pad count", 2, size.name));
+    runner.expectTrue(rectsStayOnScreen(controls), testName("generic control pads stay inside", 2, size.name));
+    runner.expectTrue(hasWideMiddleControl(controls), testName("generic down pad is double-width", 2, size.name));
+  }
+  renderer.setScreenSize(480, 800);
 
   {
     startSelectedGame(core, 1);
@@ -778,7 +848,7 @@ int main(int argc, char** argv) {
   runner.printSummary();
   if (const char* screensPath = screenOutputPath(argc, argv)) {
     exportScreens(core, screensPath);
-    std::printf("Wrote Nu, Pogodi screen frames to %s\n", screensPath);
+    std::printf("Wrote game screen frames to %s\n", screensPath);
   }
   testUseRealtimeMillis();
   return runner.allPassed() ? 0 : 1;

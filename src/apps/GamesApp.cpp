@@ -338,7 +338,7 @@ void renderBoard() {
   const char* message = game == Game::Snake && snake.won()   ? "Board complete!"
                         : ended()                            ? "Game over - Menu to restart"
                         : game == Game::Tiles && tiles.won() ? "2048 reached! Keep playing"
-                        : game == Game::Blocks               ? "Up: rotate   Down: lower"
+                        : game == Game::Blocks               ? "Top: rotate   Down: lower"
                         : game == Game::Eggs
                             ? (manual ? "Basket tap = one step" : "Catch eggs - three misses end the game")
                         : game == Game::Snake ? (manual ? "Direction = one step" : "Slow pace - Menu to pause")
@@ -346,13 +346,17 @@ void renderBoard() {
   centered(h - 162, message, THEME.smallFontId);
   centered(h - 140, game == Game::Eggs ? "Tap a chute or use the screen edges" : "Tap top/bottom/left/right edges",
            THEME.smallFontId);
-  constexpr const char* controls[] = {"Up", "Down", "Left", "Right"};
-  for (int i = 0; i < 4; ++i) {
+  constexpr const char* controls[] = {"Left", "Down", "Right"};
+  const int count = game == Game::Eggs ? 4 : 3;
+  for (int i = 0; i < count; ++i) {
     const char* label = game == Game::Eggs ? BASKET_NAMES[i] : controls[i];
     const int font = game == Game::Eggs ? THEME.smallFontId : THEME.uiFontId;
-    const int x = i * w / 4, y = h - FOOTER_HEIGHT - CONTROL_HEIGHT;
-    renderer.drawRect(x + 3, y + 4, w / 4 - 6, CONTROL_HEIGHT - 8, ink);
-    renderer.drawText(font, x + (w / 4 - renderer.getTextWidth(font, label)) / 2,
+    const int firstQuarter = game != Game::Eggs && i == 2 ? 3 : i;
+    const int quarters = game != Game::Eggs && i == 1 ? 2 : 1;
+    const int x = firstQuarter * w / 4, width = (firstQuarter + quarters) * w / 4 - x;
+    const int y = h - FOOTER_HEIGHT - CONTROL_HEIGHT;
+    renderer.drawRect(x + 3, y + 4, width - 6, CONTROL_HEIGHT - 8, ink);
+    renderer.drawText(font, x + (width - renderer.getTextWidth(font, label)) / 2,
                       y + (CONTROL_HEIGHT - renderer.getLineHeight(font)) / 2, label, ink);
   }
   ui::buttonBar(renderer, THEME, ui::ButtonBar("Games", "Menu", "<", ">"));
@@ -392,7 +396,7 @@ bool handleEvent(Core& core, const Event& event) {
       if (game == Game::Eggs) {
         selectBasket(index);
       } else {
-        constexpr Button buttons[] = {Button::Up, Button::Down, Button::Left, Button::Right};
+        constexpr Button buttons[] = {Button::Left, Button::Down, Button::Down, Button::Right};
         button(buttons[index]);
       }
     } else {
