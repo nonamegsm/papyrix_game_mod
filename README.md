@@ -37,6 +37,14 @@ margin or physical button. This host preview uses illustrative fonts.
 
 ## Nu, Pogodi! screen previews
 
+An optional local import uses the original LCD SVG shapes and printed inlay,
+with their proportions preserved. Run
+`python tools/generate_nu_pogodi_art.py --fetch` before building the firmware.
+See [artwork sources and import notes](third_party/nu-pogodi/README.md).
+The source assets have no stated redistribution license, so the public repo
+contains the renderer/importer and retains pixel drawings when assets are absent.
+The previews below show that default pixel-art build.
+
 Catch eggs from four chutes, move the wolf's basket between four positions,
 and avoid three misses. Play at a slow automatic pace or advance one step
 per basket input. See the [game controls](docs/games.md#nu-pogodi).

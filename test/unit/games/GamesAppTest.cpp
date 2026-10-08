@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include "apps/GamesApp.h"
+#include "apps/NuPogodiArtwork.h"
 #include "content/ContentHandle.h"
 #include "core/Core.h"
 #include "test_utils.h"
@@ -208,6 +210,55 @@ bool rectsEqual(const std::vector<GfxRenderer::RectCall>& lhs, const std::vector
   return true;
 }
 
+#if PAPYRIX_NU_ORIGINAL_ART_AVAILABLE
+int blackPixels(const papyrix::games::art::Bitmap& bitmap) {
+  if (!bitmap.data || bitmap.width == 0 || bitmap.height == 0) return 0;
+  const int rowBytes = (bitmap.width + 7) / 8;
+  int count = 0;
+  for (int y = 0; y < bitmap.height; ++y) {
+    for (int x = 0; x < bitmap.width; ++x) {
+      if ((bitmap.data[y * rowBytes + x / 8] & (0x80 >> (x & 7))) == 0) ++count;
+    }
+  }
+  return count;
+}
+
+uint32_t bitmapFingerprint(const papyrix::games::art::Bitmap& bitmap) {
+  uint32_t hash = 2166136261u;
+  const auto mix = [&](uint32_t value) {
+    hash ^= value;
+    hash *= 16777619u;
+  };
+  mix(static_cast<uint16_t>(bitmap.x));
+  mix(static_cast<uint16_t>(bitmap.y));
+  mix(bitmap.width);
+  mix(bitmap.height);
+  const int rowBytes = (bitmap.width + 7) / 8;
+  for (int i = 0; bitmap.data && i < rowBytes * bitmap.height; ++i) mix(bitmap.data[i]);
+  return hash;
+}
+
+bool bitmapFitsArtwork(const papyrix::games::art::Bitmap& bitmap, const papyrix::games::art::Artwork& artwork) {
+  return bitmap.data && bitmap.width > 0 && bitmap.height > 0 && bitmap.x >= 0 && bitmap.y >= 0 &&
+         bitmap.x + bitmap.width <= artwork.width && bitmap.y + bitmap.height <= artwork.height;
+}
+
+bool aspectPreservedWithinOnePixel(uint16_t width, uint16_t height) {
+  constexpr double kSourceWidth = 1570.2845;
+  constexpr double kSourceHeight = 989.1816;
+  const int expectedHeight = static_cast<int>(std::lround(width * kSourceHeight / kSourceWidth));
+  const int expectedWidth = static_cast<int>(std::lround(height * kSourceWidth / kSourceHeight));
+  return std::abs(static_cast<int>(height) - expectedHeight) <= 1 ||
+         std::abs(static_cast<int>(width) - expectedWidth) <= 1;
+}
+
+void expectInkAndBounds(TestUtils::TestRunner& runner, const papyrix::games::art::Artwork& artwork,
+                        const papyrix::games::art::Bitmap& bitmap, const std::string& name) {
+  runner.expectTrue(bitmapFitsArtwork(bitmap, artwork), name + " bitmap stays inside artwork");
+  runner.expectTrue(blackPixels(bitmap) > 0, name + " bitmap has native ink");
+}
+#endif
+
 std::vector<GfxRenderer::RectCall> fallingRectsAfterInput(Core& core, Event input) {
   startSelectedGame(core, 2);
   handleEvent(core, input);
@@ -364,10 +415,20 @@ void exportScreens(Core& core, const char* outputPath) {
     renderFresh(core);
     frames.push_back(captureFrame((std::string("nu-pogodi-initial-") + size.name).c_str()));
 
-    handleEvent(core, tapDpad(3));
-    update(core);
-    testSetManualMillis(1200);
-    update(core);
+    constexpr const char* kPoseNames[] = {"upper-left", "lower-left", "upper-right", "lower-right"};
+    for (int lane = 0; lane < 4; ++lane) {
+      startSelectedGame(core, kEggRow);
+      handleEvent(core, tapDpad(lane));
+      update(core);
+      renderFresh(core);
+      frames.push_back(captureFrame((std::string("nu-pogodi-") + kPoseNames[lane] + "-" + size.name).c_str()));
+    }
+
+    setEggPace(core, true, 100);
+    for (int lane = 0; lane < 4; ++lane) {
+      handleEvent(core, tapDpad(lane));
+      update(core);
+    }
     renderFresh(core);
     frames.push_back(captureFrame((std::string("nu-pogodi-midgame-") + size.name).c_str()));
 
@@ -823,6 +884,65 @@ int main(int argc, char** argv) {
     runner.expectTrue(hasCenteredText("Score: 0   Misses: 0/3"), "Nu, Pogodi restart resets scoreboard");
     runner.expectTrue(basketIs("Upper left"), "Nu, Pogodi restart resets basket lane");
   }
+
+#if PAPYRIX_NU_ORIGINAL_ART_AVAILABLE
+  for (const auto& size : kScreenSizes) {
+    const auto& artwork = papyrix::games::art::artworkFor(size.width, size.height);
+    const int playWidth = size.width - 32;
+    const int playHeight = size.height - 284;
+    runner.expectTrue(artwork.width <= playWidth - 4,
+                      testName("original Nu artwork width fits bordered play area", 3, size.name));
+    runner.expectTrue(artwork.height <= playHeight - 4,
+                      testName("original Nu artwork height fits bordered play area", 3, size.name));
+    runner.expectTrue(aspectPreservedWithinOnePixel(artwork.width, artwork.height),
+                      testName("original Nu artwork preserves source aspect", 3, size.name));
+
+    expectInkAndBounds(runner, artwork, artwork.background, testName("original Nu background", 3, size.name));
+    for (int body = 0; body < 2; ++body) {
+      expectInkAndBounds(
+          runner, artwork, artwork.bodies[body],
+          testName(body == 0 ? "original Nu left-facing body" : "original Nu right-facing body", 3, size.name));
+    }
+    for (int basket = 0; basket < 4; ++basket) {
+      expectInkAndBounds(runner, artwork, artwork.baskets[basket],
+                         testName("original Nu basket mask", basket, size.name));
+      for (int other = 0; other < basket; ++other) {
+        const bool geometryDistinct = artwork.baskets[other].x != artwork.baskets[basket].x ||
+                                      artwork.baskets[other].y != artwork.baskets[basket].y ||
+                                      artwork.baskets[other].width != artwork.baskets[basket].width ||
+                                      artwork.baskets[other].height != artwork.baskets[basket].height;
+        runner.expectTrue(geometryDistinct, testName("original Nu basket geometry is distinct", basket, size.name));
+        runner.expectNe(bitmapFingerprint(artwork.baskets[other]), bitmapFingerprint(artwork.baskets[basket]),
+                        testName("original Nu basket masks are distinct", basket, size.name));
+      }
+    }
+    for (int lane = 0; lane < 4; ++lane) {
+      for (int position = 0; position < 5; ++position) {
+        expectInkAndBounds(runner, artwork, artwork.eggs[lane][position],
+                           testName("original Nu egg slot mask", lane * 5 + position, size.name));
+      }
+    }
+  }
+
+  {
+    renderer.setScreenSize(480, 800);
+    std::vector<std::vector<GfxRenderer::RectCall>> poseRects;
+    for (int lane = 0; lane < 4; ++lane) {
+      startSelectedGame(core, kEggRow);
+      handleEvent(core, tapDpad(lane));
+      update(core);
+      renderFresh(core);
+      poseRects.push_back(renderer.fillRects());
+      runner.expectTrue(!renderer.fillRects().empty(),
+                        testName("original Nu pose renders source masks", lane, "480x800"));
+      runner.expectTrue(renderer.lineCalls().empty(),
+                        testName("original Nu pose avoids fallback line art", lane, "480x800"));
+    }
+    runner.expectFalse(rectsEqual(poseRects[0], poseRects[1]), "original Nu upper-left and lower-left poses differ");
+    runner.expectFalse(rectsEqual(poseRects[0], poseRects[2]), "original Nu left and right body poses differ");
+    runner.expectFalse(rectsEqual(poseRects[2], poseRects[3]), "original Nu upper-right and lower-right poses differ");
+  }
+#endif
 
   {
     startSelectedGame(core, 1);

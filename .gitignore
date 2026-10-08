@@ -23,3 +23,9 @@ tools/reader-test/build/
 .worktrees/
 __pycache__/
 /dist/
+
+# Original handheld artwork has no stated redistribution license.
+# Import it locally with tools/generate_nu_pogodi_art.py; do not publish it.
+/third_party/nu-pogodi/nupogodi.svg
+/third_party/nu-pogodi/fg.png
+/src/apps/NuPogodiArtwork.generated.*

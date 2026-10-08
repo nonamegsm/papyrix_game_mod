@@ -10,6 +10,7 @@
 #include "../ui/Elements.h"
 #include "GameModels.h"
 #include "GameTouchMargins.h"
+#include "NuPogodiArtwork.h"
 #include "ThemeManager.h"
 
 extern GfxRenderer renderer;
@@ -215,6 +216,65 @@ ui::touch::Rect eggPlayArea() {
           static_cast<int16_t>(renderer.getScreenHeight() - 284)};
 }
 
+#if PAPYRIX_NU_ORIGINAL_ART_AVAILABLE
+// Transparent monochrome masks retain the original SVG outlines and positions.
+void drawArt(const games::art::Bitmap& image, int originX, int originY) {
+  const int rowBytes = (image.width + 7) / 8;
+  for (int y = 0; y < image.height; ++y) {
+    int start = -1;
+    for (int x = 0; x < image.width; ++x) {
+      const bool ink = (image.data[y * rowBytes + x / 8] & (0x80 >> (x & 7))) == 0;
+      if (ink && start < 0) start = x;
+      if (!ink && start >= 0) {
+        renderer.fillRect(originX + image.x + start, originY + image.y + y, x - start, 1, THEME.primaryTextBlack);
+        start = -1;
+      }
+    }
+    if (start >= 0) {
+      renderer.fillRect(originX + image.x + start, originY + image.y + y, image.width - start, 1,
+                        THEME.primaryTextBlack);
+    }
+  }
+}
+
+void renderEggs() {
+  const auto area = eggPlayArea();
+  const auto& art = games::art::artworkFor(renderer.getScreenWidth(), renderer.getScreenHeight());
+  const int x = area.x + (area.width - art.width) / 2;
+  const int y = area.y + (area.height - art.height) / 2;
+  renderer.drawRect(x - 2, y - 2, art.width + 4, art.height + 4, THEME.primaryTextBlack);
+  const int lane = eggs.basketLane();
+  drawArt(art.background, x, y);
+  drawArt(art.bodies[lane >= 2 ? 1 : 0], x, y);
+  drawArt(art.baskets[lane], x, y);
+  drawArt(art.rabbit[0], x, y);
+  drawArt(art.rabbit[1], x, y);
+  drawArt(art.gameB, x, y);
+  // Segment order: top, upper right, lower right, bottom, lower left, upper left, middle.
+  constexpr uint8_t DIGITS[] = {0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f};
+  uint32_t score = eggs.score() % 1000;
+  for (int digit = 2; digit >= 0; --digit) {
+    const uint8_t segments = DIGITS[score % 10];
+    score /= 10;
+    for (int bit = 0; bit < 7; ++bit) {
+      if (segments & (1u << bit)) drawArt(art.digits[digit][bit], x, y);
+    }
+  }
+  for (int miss = 0; miss < eggs.misses(); ++miss) drawArt(art.misses[miss], x, y);
+  for (int channel = 0; channel < games::EggCatcher::LANES; ++channel) {
+    for (int position = 0; position < games::EggCatcher::POSITIONS; ++position) {
+      if (eggs.egg(channel, position)) {
+        // Keep the original five LCD egg positions; the catch window holds the last one.
+        drawArt(art.eggs[channel][std::min(position, 4)], x, y);
+      }
+    }
+  }
+  char text[48];
+  snprintf(text, sizeof(text), "Basket: %s", BASKET_NAMES[lane]);
+  centered(82, text, THEME.smallFontId);
+}
+
+#else
 // Small original pixel drawings, scaled to the available play area.
 void pixelSprite(const uint16_t* rows, int count, int x, int y, int scale, bool mirror) {
   for (int row = 0; row < count; ++row) {
@@ -275,6 +335,8 @@ void renderEggs() {
   snprintf(text, sizeof(text), "Basket: %s", BASKET_NAMES[eggs.basketLane()]);
   centered(82, text, THEME.smallFontId);
 }
+
+#endif
 
 void renderBoard() {
   char text[64];

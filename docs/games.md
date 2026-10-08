@@ -42,7 +42,10 @@ rotates and the bottom edge lowers the piece, just like the direction buttons.
 ## Nu, Pogodi!
 
 This is an e-paper adaptation of the four-position egg-catching handheld game,
-with original pixel drawings of a wolf, hens, eggs, and a basket. It uses the
+with pixel drawings by default, or the original LCD graphics through the
+[optional local artwork import](../third_party/nu-pogodi/README.md). Imported
+graphics retain the SVG outlines and original four wolf/basket positions,
+scaled uniformly for portrait and landscape. It uses the
 catching idea described in the [original handheld's manual archive](https://game-im02.ru/load/instrukcija_k_igre_ehlektronika_nu_pogodi_arzamas/1-1-0-27),
 with a slower clock and simplified three-miss rule.
 
