@@ -13,6 +13,7 @@
 
 #include "apps/GamesApp.h"
 #include "apps/NuPogodiArtwork.h"
+#include "apps/SolitaireModel.h"
 #include "content/ContentHandle.h"
 #include "core/Core.h"
 #include "test_utils.h"
@@ -33,6 +34,7 @@ using papyrix::Button;
 using papyrix::Core;
 using papyrix::Event;
 using papyrix::Settings;
+using papyrix::games::Solitaire;
 using papyrix::games_app::enter;
 using papyrix::games_app::handleEvent;
 using papyrix::games_app::render;
@@ -40,11 +42,44 @@ using papyrix::games_app::update;
 
 constexpr int kChooserFirstRowY = 102;
 constexpr int kEggRow = 3;
+constexpr int kSolitaireRow = 4;
 
 struct ScreenSize {
   int width;
   int height;
   const char* name;
+};
+
+struct TestPoint {
+  int x;
+  int y;
+};
+
+struct TestRect {
+  int x;
+  int y;
+  int w;
+  int h;
+};
+
+struct SolitaireLayoutForTest {
+  int w;
+  int h;
+  int cardW;
+  int cardH;
+  int gap;
+  int left;
+  int topY;
+  int tableauY;
+  int boardBottom;
+  int controlsY;
+};
+
+struct SolitaireMoveForTest {
+  int draws;
+  int fromPile;
+  int fromIndex;
+  int toPile;
 };
 
 constexpr ScreenSize kScreenSizes[] = {
@@ -102,6 +137,14 @@ Event tapDpad(int visualIndex) {
   const int h = renderer.getScreenHeight();
   return tap(visualIndex * w / 4 + w / 8, h - 50 - 72 + 36);
 }
+
+Event tapSolitaireControl(int index) {
+  const int w = renderer.getScreenWidth();
+  const int h = renderer.getScreenHeight();
+  return tap(index * w / 3 + w / 6, h - 50 - 72 + 36);
+}
+
+Event tapPoint(TestPoint point) { return tap(point.x, point.y); }
 
 Event tapTopEdge() { return tap(renderer.getScreenWidth() / 2, 8); }
 
@@ -161,6 +204,84 @@ bool linesStayOnScreen(const std::vector<GfxRenderer::LineCall>& lines) {
     if (line.y0 > renderer.getScreenHeight() || line.y1 > renderer.getScreenHeight()) return false;
   }
   return true;
+}
+
+SolitaireLayoutForTest solitaireLayoutForTest() {
+  const int w = renderer.getScreenWidth();
+  const int h = renderer.getScreenHeight();
+  const int gap = w < 520 ? 5 : 8;
+  const int cardW = std::max(42, std::min(w < h ? 66 : 72, (w - 16 - gap * 6) / 7));
+  const int cardH = std::max(58, std::min(h < 550 ? 64 : 88, cardW * 4 / 3));
+  const int total = cardW * 7 + gap * 6;
+  return {w, h, cardW, cardH, gap, (w - total) / 2, 80, h < 550 ? 174 : 180, h - 156, h - 50 - 72};
+}
+
+TestRect solitaireTopRectForTest(int slot) {
+  const auto l = solitaireLayoutForTest();
+  return {l.left + slot * (l.cardW + l.gap), l.topY, l.cardW, l.cardH};
+}
+
+TestRect solitaireColumnRectForTest(int col) {
+  const auto l = solitaireLayoutForTest();
+  return {l.left + col * (l.cardW + l.gap), l.tableauY, l.cardW, l.boardBottom - l.tableauY};
+}
+
+TestPoint centerOf(TestRect rect) { return {rect.x + rect.w / 2, rect.y + rect.h / 2}; }
+
+int firstFaceUpForTest(const Solitaire& game, int pile) {
+  const int count = game.count(pile);
+  for (int i = 0; i < count; ++i) {
+    if (game.faceUp(pile, i)) return i;
+  }
+  return count;
+}
+
+TestPoint solitaireCardPointForTest(const Solitaire& game, int pile, int index) {
+  if (pile == Solitaire::WASTE) return centerOf(solitaireTopRectForTest(1));
+  if (pile >= Solitaire::FOUNDATION_FIRST && pile < Solitaire::TABLEAU_FIRST) {
+    return centerOf(solitaireTopRectForTest(pile - Solitaire::FOUNDATION_FIRST + 3));
+  }
+  const auto l = solitaireLayoutForTest();
+  const int col = pile - Solitaire::TABLEAU_FIRST;
+  const auto column = solitaireColumnRectForTest(col);
+  const int first = firstFaceUpForTest(game, pile);
+  const int pitch = std::max(22, renderer.getLineHeight(0) + 4);
+  const int startY = column.y + first * (l.h < 550 ? 6 : 12);
+  return {column.x + column.w / 2, startY + std::max(0, index - first) * pitch + l.cardH / 2};
+}
+
+TestPoint solitaireTargetPointForTest(int pile) {
+  if (pile >= Solitaire::FOUNDATION_FIRST && pile < Solitaire::TABLEAU_FIRST) {
+    return centerOf(solitaireTopRectForTest(pile - Solitaire::FOUNDATION_FIRST + 3));
+  }
+  if (pile >= Solitaire::TABLEAU_FIRST && pile < Solitaire::PILE_COUNT) {
+    const auto column = solitaireColumnRectForTest(pile - Solitaire::TABLEAU_FIRST);
+    return {column.x + column.w / 2, column.y + 8};
+  }
+  return centerOf(solitaireTopRectForTest(1));
+}
+
+bool findLegalSolitaireMove(SolitaireMoveForTest& out) {
+  Solitaire game;
+  game.reset(100);
+  for (int draws = 0; draws <= 8; ++draws) {
+    for (int fromPile = Solitaire::WASTE; fromPile < Solitaire::PILE_COUNT; ++fromPile) {
+      const int first =
+          fromPile >= Solitaire::TABLEAU_FIRST ? firstFaceUpForTest(game, fromPile) : game.count(fromPile) - 1;
+      for (int fromIndex = std::max(0, first); fromIndex < game.count(fromPile); ++fromIndex) {
+        if (!game.faceUp(fromPile, fromIndex)) continue;
+        for (int toPile = Solitaire::FOUNDATION_FIRST; toPile < Solitaire::PILE_COUNT; ++toPile) {
+          Solitaire copy = game;
+          if (copy.move(fromPile, fromIndex, toPile)) {
+            out = {draws, fromPile, fromIndex, toPile};
+            return true;
+          }
+        }
+      }
+    }
+    if (!game.draw()) break;
+  }
+  return false;
 }
 
 std::string basketLabel(const char* label) {
@@ -292,6 +413,7 @@ struct CapturedFrame {
   std::vector<GfxRenderer::RectCall> drawRects;
   std::vector<GfxRenderer::RectCall> fillRects;
   std::vector<GfxRenderer::LineCall> lineCalls;
+  std::vector<GfxRenderer::DrawCall> operations;
 };
 
 CapturedFrame captureFrame(const char* name) {
@@ -303,7 +425,8 @@ CapturedFrame captureFrame(const char* name) {
           renderer.textCalls(),
           renderer.drawRects(),
           renderer.fillRects(),
-          renderer.lineCalls()};
+          renderer.lineCalls(),
+          renderer.operations()};
 }
 
 void writeEscaped(FILE* file, const std::string& value) {
@@ -361,6 +484,48 @@ void writeLine(FILE* file, const GfxRenderer::LineCall& line) {
                line.color ? "true" : "false");
 }
 
+const char* operationKindName(GfxRenderer::DrawCall::Kind kind) {
+  switch (kind) {
+    case GfxRenderer::DrawCall::Kind::Rect:
+      return "rect";
+    case GfxRenderer::DrawCall::Kind::Fill:
+      return "fill";
+    case GfxRenderer::DrawCall::Kind::Line:
+      return "line";
+    case GfxRenderer::DrawCall::Kind::Text:
+      return "text";
+    case GfxRenderer::DrawCall::Kind::Centered:
+      return "centered";
+  }
+  return "unknown";
+}
+
+void writeOperation(FILE* file, const GfxRenderer::DrawCall& call) {
+  std::fprintf(file, "{\"kind\":\"%s\"", operationKindName(call.kind));
+  switch (call.kind) {
+    case GfxRenderer::DrawCall::Kind::Rect:
+    case GfxRenderer::DrawCall::Kind::Fill:
+      std::fprintf(file, ",\"x\":%d,\"y\":%d,\"w\":%d,\"h\":%d,\"black\":%s", call.x, call.y, call.w, call.h,
+                   call.black ? "true" : "false");
+      break;
+    case GfxRenderer::DrawCall::Kind::Line:
+      std::fprintf(file, ",\"x0\":%d,\"y0\":%d,\"x1\":%d,\"y1\":%d,\"black\":%s", call.x, call.y, call.x1, call.y1,
+                   call.black ? "true" : "false");
+      break;
+    case GfxRenderer::DrawCall::Kind::Text:
+      std::fprintf(file, ",\"font\":%d,\"x\":%d,\"y\":%d,\"black\":%s,\"style\":%d,\"text\":", call.fontId, call.x,
+                   call.y, call.black ? "true" : "false", static_cast<int>(call.style));
+      writeEscaped(file, call.text);
+      break;
+    case GfxRenderer::DrawCall::Kind::Centered:
+      std::fprintf(file, ",\"font\":%d,\"y\":%d,\"black\":%s,\"style\":%d,\"text\":", call.fontId, call.y,
+                   call.black ? "true" : "false", static_cast<int>(call.style));
+      writeEscaped(file, call.text);
+      break;
+  }
+  std::fputc('}', file);
+}
+
 template <typename T, typename Writer>
 void writeArray(FILE* file, const std::vector<T>& values, Writer writer) {
   std::fputc('[', file);
@@ -393,6 +558,8 @@ void writeFramesJson(const std::vector<CapturedFrame>& frames, const char* outpu
     writeArray(file, frame.fillRects, writeRect);
     std::fputs(",\"drawLines\":", file);
     writeArray(file, frame.lineCalls, writeLine);
+    std::fputs(",\"operations\":", file);
+    writeArray(file, frame.operations, writeOperation);
     std::fputc('}', file);
   }
   std::fputs("]}\n", file);
@@ -440,6 +607,15 @@ void exportScreens(Core& core, const char* outputPath) {
     startSelectedGame(core, 2);
     renderFresh(core);
     frames.push_back(captureFrame((std::string("falling-blocks-controls-") + size.name).c_str()));
+
+    startSelectedGame(core, kSolitaireRow);
+    renderFresh(core);
+    frames.push_back(captureFrame((std::string("solitaire-initial-") + size.name).c_str()));
+
+    handleEvent(core, tapSolitaireControl(0));
+    update(core);
+    renderFresh(core);
+    frames.push_back(captureFrame((std::string("solitaire-stockdraw-") + size.name).c_str()));
   }
   writeFramesJson(frames, outputPath);
 }
@@ -500,7 +676,14 @@ int main(int argc, char** argv) {
     handleEvent(core, press(Button::Up));
     handleEvent(core, press(Button::Center));
     renderFresh(core);
-    runner.expectTrue(hasCenteredText("Nu, Pogodi!"), "chooser up wraps from first row to Nu, Pogodi");
+    runner.expectTrue(hasCenteredText("Solitaire (Klondike)"), "chooser up wraps from first row to solitaire");
+  }
+
+  {
+    startSelectedGame(core, kSolitaireRow);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Solitaire (Klondike)"),
+                      "four downs then center launches solitaire from chooser");
   }
 
   {
@@ -529,6 +712,13 @@ int main(int argc, char** argv) {
     handleEvent(core, tapChooserRow(3));
     renderFresh(core);
     runner.expectTrue(hasCenteredText("Nu, Pogodi!"), "touching fourth chooser row launches Nu, Pogodi");
+  }
+
+  {
+    resetApp(core);
+    handleEvent(core, tapChooserRow(4));
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Solitaire (Klondike)"), "touching fifth chooser row launches solitaire");
   }
 
   {
@@ -708,6 +898,160 @@ int main(int argc, char** argv) {
     startSelectedGame(core, 1);
     runner.expectTrue(handleEvent(core, tapCenterBoard()), "playing board center tap is consumed");
     runner.expectFalse(update(core), "playing board center tap does not trigger gameplay input");
+  }
+
+  {
+    startSelectedGame(core, kSolitaireRow);
+    testSetManualMillis(100000);
+    runner.expectFalse(update(core), "solitaire does not advance on timer");
+  }
+
+  {
+    startSelectedGame(core, kSolitaireRow);
+    renderFresh(core);
+    runner.expectTrue(hasExactDrawnText("Stock"), "solitaire renders stock control");
+    runner.expectTrue(hasExactDrawnText("Undo"), "solitaire renders undo control");
+    runner.expectTrue(hasExactDrawnText("Auto"), "solitaire renders auto control");
+    runner.expectTrue(rectsStayOnScreen(renderer.drawRects()), "solitaire draw rects stay inside screen");
+    runner.expectTrue(linesStayOnScreen(renderer.lineCalls()), "solitaire lines stay inside screen");
+  }
+
+  {
+    startSelectedGame(core, kSolitaireRow);
+    runner.expectTrue(handleEvent(core, tapSolitaireControl(0)), "solitaire stock touch is consumed");
+    runner.expectTrue(update(core), "solitaire stock touch draws and redraws");
+    runner.expectTrue(handleEvent(core, tapSolitaireControl(1)), "solitaire undo touch is consumed");
+    runner.expectTrue(update(core), "solitaire undo touch redraws after stock draw");
+    runner.expectTrue(handleEvent(core, tapOutsideScreen()), "solitaire outside touch is consumed");
+    runner.expectFalse(update(core), "solitaire outside touch does not move cards");
+  }
+
+  {
+    startSelectedGame(core, kSolitaireRow);
+    const auto layout = solitaireLayoutForTest();
+    runner.expectTrue(handleEvent(core, tap(-1, layout.controlsY + 10)), "solitaire rejects outside-x control-row tap");
+    runner.expectFalse(update(core), "solitaire outside-x control-row tap does not redraw");
+  }
+
+  {
+    Solitaire model;
+    model.reset(100);
+    int colWithHidden = 1;
+    for (int col = 0; col < 7; ++col) {
+      if (firstFaceUpForTest(model, Solitaire::TABLEAU_FIRST + col) > 0) {
+        colWithHidden = col;
+        break;
+      }
+    }
+    const auto hiddenPrefix = solitaireColumnRectForTest(colWithHidden);
+    startSelectedGame(core, kSolitaireRow);
+    runner.expectTrue(handleEvent(core, tap(hiddenPrefix.x + hiddenPrefix.w / 2, hiddenPrefix.y + 10)),
+                      "solitaire hidden tableau prefix tap is consumed");
+    runner.expectFalse(update(core), "solitaire hidden tableau prefix tap does not select a face-up card");
+  }
+
+  {
+    SolitaireMoveForTest move = {};
+    if (findLegalSolitaireMove(move)) {
+      Solitaire model;
+      model.reset(100);
+      startSelectedGame(core, kSolitaireRow);
+      for (int i = 0; i < move.draws; ++i) {
+        handleEvent(core, tapSolitaireControl(0));
+        update(core);
+        model.draw();
+      }
+      runner.expectTrue(handleEvent(core, tapPoint(solitaireCardPointForTest(model, move.fromPile, move.fromIndex))),
+                        "solitaire legal source card tap is consumed");
+      runner.expectTrue(update(core), "solitaire legal source selection redraws");
+      runner.expectTrue(handleEvent(core, tapPoint(solitaireTargetPointForTest(move.toPile))),
+                        "solitaire legal target tap is consumed");
+      runner.expectTrue(update(core), "solitaire legal touch move redraws");
+    } else {
+      runner.expectTrue(true, "solitaire deterministic deal has no legal touch move to exercise");
+    }
+  }
+
+  {
+    Solitaire model;
+    model.reset(100);
+    const int pile = Solitaire::TABLEAU_FIRST;
+    const int first = firstFaceUpForTest(model, pile);
+    startSelectedGame(core, kSolitaireRow);
+    runner.expectTrue(handleEvent(core, tapPoint(solitaireCardPointForTest(model, pile, first))),
+                      "solitaire source selection before auto is consumed");
+    runner.expectTrue(update(core), "solitaire source selection before auto redraws");
+    runner.expectTrue(handleEvent(core, tapSolitaireControl(2)), "solitaire auto control after selection is consumed");
+    update(core);
+    runner.expectTrue(handleEvent(core, tapPoint(solitaireCardPointForTest(model, pile, first))),
+                      "solitaire new selection after auto is consumed");
+    runner.expectTrue(update(core), "solitaire new selection after auto has no stale selected source");
+  }
+
+  {
+    Solitaire model;
+    model.reset(100);
+    const int pile = Solitaire::TABLEAU_FIRST;
+    const int first = firstFaceUpForTest(model, pile);
+    startSelectedGame(core, kSolitaireRow);
+    runner.expectTrue(handleEvent(core, tapPoint(solitaireCardPointForTest(model, pile, first))),
+                      "solitaire source selection before disabled undo is consumed");
+    runner.expectTrue(update(core), "solitaire source selection before disabled undo redraws");
+    runner.expectTrue(handleEvent(core, tapSolitaireControl(1)), "solitaire disabled undo after selection is consumed");
+    runner.expectTrue(update(core), "solitaire disabled undo clears selection or redraws consistently");
+    runner.expectTrue(handleEvent(core, tapPoint(solitaireCardPointForTest(model, pile, first))),
+                      "solitaire can select source again after disabled undo");
+    runner.expectTrue(update(core), "solitaire selection after disabled undo redraws");
+  }
+
+  {
+    startSelectedGame(core, kSolitaireRow);
+    runner.expectTrue(handleEvent(core, press(Button::Center)), "solitaire center draws from stock by default");
+    runner.expectTrue(update(core), "solitaire center draw updates the view");
+    runner.expectTrue(handleEvent(core, press(Button::Back)), "solitaire back opens pause menu");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Paused"), "solitaire back pauses instead of leaving chooser");
+    runner.expectTrue(hasDrawnText("Undo"), "solitaire pause menu offers undo");
+    runner.expectFalse(hasDrawnText("Pace:"), "solitaire pause menu has no pace option");
+    handleEvent(core, press(Button::Down));
+    handleEvent(core, press(Button::Down));
+    handleEvent(core, press(Button::Center));
+    runner.expectTrue(update(core), "solitaire pause undo row applies undo and resumes");
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Solitaire (Klondike)"), "solitaire undo row returns to play screen");
+  }
+
+  {
+    startSelectedGame(core, kSolitaireRow);
+    runner.expectTrue(handleEvent(core, tapButtonBar(1)), "solitaire normal footer menu opens pause");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Paused"), "solitaire normal footer menu pauses");
+  }
+
+  {
+    startSelectedGame(core, kSolitaireRow);
+    runner.expectTrue(handleEvent(core, tapButtonBar(0)), "solitaire normal footer games is consumed");
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Games"), "solitaire normal footer games returns to chooser");
+  }
+
+  {
+    startSelectedGame(core, kSolitaireRow);
+    core.settings.frontButtonLayout = Settings::FrontLRBC;
+    runner.expectTrue(handleEvent(core, tapButtonBar(3)), "solitaire LRBC footer menu opens pause");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Paused"), "solitaire LRBC footer menu pauses");
+  }
+
+  {
+    startSelectedGame(core, kSolitaireRow);
+    core.settings.frontButtonLayout = Settings::FrontLRBC;
+    runner.expectTrue(handleEvent(core, tapButtonBar(2)), "solitaire LRBC footer games is consumed");
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Games"), "solitaire LRBC footer games returns to chooser");
   }
 
   {
@@ -953,7 +1297,7 @@ int main(int argc, char** argv) {
 
   for (const auto& size : kScreenSizes) {
     renderer.setScreenSize(size.width, size.height);
-    for (int gameRow = 0; gameRow < 4; ++gameRow) {
+    for (int gameRow = 0; gameRow < 5; ++gameRow) {
       startSelectedGame(core, gameRow);
       renderFresh(core);
       runner.expectTrue(!renderer.drawRects().empty(), testName("render outlines", gameRow, size.name));

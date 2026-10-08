@@ -1362,6 +1362,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
     add_executable(${TEST_NAME}
       ${TEST_SRC}
       ${PROJECT_ROOT}/src/apps/GamesApp.cpp
+      ${PROJECT_ROOT}/src/apps/SolitaireView.cpp
+      ${PROJECT_ROOT}/src/apps/SolitaireModel.cpp
       ${PROJECT_ROOT}/src/apps/GameModels.cpp
       ${PROJECT_ROOT}/src/ui/Elements.cpp
       ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
@@ -1396,6 +1398,10 @@ foreach(TEST_SRC ${TEST_SOURCES})
     endif()
   elseif(TEST_NAME STREQUAL "GameTouchMarginsTest")
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
+  elseif(TEST_NAME STREQUAL "SolitaireModelTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/SolitaireModel.cpp
+      ${TEST_HELPERS})
   elseif(TEST_NAME STREQUAL "GameModelsTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

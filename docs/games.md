@@ -1,7 +1,7 @@
 # Games
 
 Open **Apps > Games** and select **2048**, **Snake**, **Falling Blocks**
-(a Tetris-style puzzle), or **Nu, Pogodi!**. Games run offline and do not need
+(a Tetris-style puzzle), **Nu, Pogodi!**, or **Solitaire (Klondike / Косинка)**. Games run offline and do not need
 files on the SD card.
 
 Use Up/Down to choose a game and Center to start. On the X4 Pro, tap a game
@@ -13,10 +13,16 @@ to start it. Back from the chooser returns to Apps.
 | Snake | Up, Down, Left, Right steer | Eat the outlined food; avoid the walls and your own body |
 | Falling Blocks | Left/Right move, Up rotates, Down lowers one row | Fill horizontal rows to clear them |
 | Nu, Pogodi! | Up/Down select the basket height; Left/Right select its side. Touch a chute or one of the four basket pads to select a position directly | Catch eggs from four chutes; one point per catch, three misses end the game |
+| Solitaire (Klondike) | Select a face-up card/stack, then a destination; Stock, Undo, and Auto controls | Build four suited foundations from Ace to King |
 
-During a game, Center opens the pause menu. Select **Resume**, **New game**,
+In the directional games, Center opens the pause menu. Select **Resume**, **New game**,
 or **Choose game**. Back from a game returns to the game chooser. Back from
 the pause menu resumes. Hold Power to sleep, as in the other apps.
+
+Solitaire uses Center to select/move and Back to open its menu. Its touch
+footer provides **Games** and **Menu**, and its pause menu replaces the pace
+option with **Undo**. See the [Solitaire guide](solitaire.md) for card rules,
+scrolling, physical controls, and eight-action undo.
 
 Snake, Falling Blocks, and Nu, Pogodi! start at a slow pace designed for e-paper. Their pause
 menu also offers **Pace: Turn-based**: Snake advances once per direction press,

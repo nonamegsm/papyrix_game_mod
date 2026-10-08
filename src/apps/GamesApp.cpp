@@ -11,6 +11,7 @@
 #include "GameModels.h"
 #include "GameTouchMargins.h"
 #include "NuPogodiArtwork.h"
+#include "SolitaireView.h"
 #include "ThemeManager.h"
 
 extern GfxRenderer renderer;
@@ -19,8 +20,8 @@ namespace papyrix::games_app {
 namespace {
 
 enum class Screen : uint8_t { Chooser, Playing, Paused };
-enum class Game : uint8_t { Tiles, Snake, Blocks, Eggs };
-constexpr const char* NAMES[] = {"2048", "Snake", "Falling Blocks", "Nu, Pogodi!"};
+enum class Game : uint8_t { Tiles, Snake, Blocks, Eggs, Solitaire };
+constexpr const char* NAMES[] = {"2048", "Snake", "Falling Blocks", "Nu, Pogodi!", "Solitaire (Klondike)"};
 constexpr int GAME_COUNT = sizeof(NAMES) / sizeof(NAMES[0]);
 constexpr const char* BASKET_NAMES[] = {"Upper left", "Lower left", "Upper right", "Lower right"};
 constexpr int LIST_Y = 80;
@@ -52,6 +53,8 @@ bool ended() {
       return blocks.gameOver();
     case Game::Eggs:
       return eggs.gameOver();
+    case Game::Solitaire:
+      return solitaire_view::won();
   }
   return true;
 }
@@ -72,6 +75,9 @@ void start() {
     case Game::Eggs:
       eggs.reset(seed);
       break;
+    case Game::Solitaire:
+      solitaire_view::reset(seed);
+      break;
   }
   screen = Screen::Playing;
   lastStep = millis();
@@ -90,7 +96,10 @@ void pauseAction() {
     case 2:
       if (game == Game::Tiles)
         screen = Screen::Chooser;
-      else
+      else if (game == Game::Solitaire) {
+        solitaire_view::undo();
+        screen = Screen::Playing;
+      } else
         manual = !manual;
       break;
     case 3:
@@ -107,8 +116,13 @@ void selectBasket(int lane) {
 }
 
 void playButton(Button button) {
+  if (game == Game::Solitaire && button != Button::Back) {
+    dirty |= solitaire_view::handleButton(button);
+    return;
+  }
   if (button == Button::Back) {
-    screen = Screen::Chooser;
+    screen = game == Game::Solitaire ? Screen::Paused : Screen::Chooser;
+    if (game == Game::Solitaire) pauseSelected = ended() ? 1 : 0;
     dirty = true;
     return;
   }
@@ -170,6 +184,8 @@ void playButton(Button button) {
       selectBasket(lane);
       break;
     }
+    case Game::Solitaire:
+      break;
   }
 }
 
@@ -339,6 +355,11 @@ void renderEggs() {
 #endif
 
 void renderBoard() {
+  if (game == Game::Solitaire) {
+    solitaire_view::renderBoard();
+    ui::buttonBar(renderer, THEME, ui::ButtonBar("Games", "Menu", "<", ">"));
+    return;
+  }
   char text[64];
   const uint32_t score = game == Game::Tiles    ? tiles.score()
                          : game == Game::Snake  ? snake.score()
@@ -449,8 +470,18 @@ bool handleEvent(Core& core, const Event& event) {
   if (action >= 0) {
     constexpr Button buttons[] = {Button::Back, Button::Center, Button::Left, Button::Right};
     if (action == 0 && screen == Screen::Chooser) return false;
-    button(buttons[action]);
+    if (screen == Screen::Playing && game == Game::Solitaire && action < 2) {
+      screen = action == 0 ? Screen::Chooser : Screen::Paused;
+      pauseSelected = ended() ? 1 : 0;
+      dirty = true;
+    } else {
+      button(buttons[action]);
+    }
   } else if (screen == Screen::Playing) {
+    if (game == Game::Solitaire) {
+      dirty |= solitaire_view::tap(p.x, p.y);
+      return true;
+    }
     const int index = ui::touch::gridIndexAt(
         p, {0, static_cast<int16_t>(h - FOOTER_HEIGHT - CONTROL_HEIGHT), static_cast<int16_t>(w), CONTROL_HEIGHT}, 4,
         1);
@@ -488,7 +519,8 @@ bool handleEvent(Core& core, const Event& event) {
 }
 
 bool update(Core&) {
-  if (screen == Screen::Playing && game != Game::Tiles && !manual && !ended()) {
+  if (screen == Screen::Playing && (game == Game::Snake || game == Game::Blocks || game == Game::Eggs) && !manual &&
+      !ended()) {
     const uint32_t now = millis();
     const uint32_t interval = game == Game::Snake ? 900 : game == Game::Eggs ? eggs.stepIntervalMs() : 1500;
     if (now - lastStep >= interval) {
@@ -508,11 +540,13 @@ bool render(Core&) {
   if (screen == Screen::Playing) {
     renderBoard();
   } else {
-    if (screen == Screen::Paused) centered(48, ended() ? "Game over" : "Paused");
+    if (screen == Screen::Paused)
+      centered(48, ended() ? (game == Game::Solitaire ? "You won!" : "Game over") : "Paused");
     const char* menu[] = {"Resume", "New game",
-                          game == Game::Tiles ? "Choose game"
-                          : manual            ? "Pace: Turn-based"
-                                              : "Pace: Slow",
+                          game == Game::Tiles       ? "Choose game"
+                          : game == Game::Solitaire ? "Undo"
+                          : manual                  ? "Pace: Turn-based"
+                                                    : "Pace: Slow",
                           "Choose game"};
     const int count = screen == Screen::Chooser ? GAME_COUNT : game == Game::Tiles ? 3 : 4;
     for (int i = 0; i < count; ++i) {
