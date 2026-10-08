@@ -3,7 +3,9 @@
 This fork of [bigbag/papyrix-reader](https://github.com/bigbag/papyrix-reader),
 based on PapyriX **v1.31.0**, adds offline **2048**, **Snake**, and **Falling Blocks**
 to **Apps > Games**. It includes pause/restart controls, slow and turn-based play,
-physical-button controls, and touch controls for the X4 Pro.
+physical-button controls, and touch controls for the X4 Pro. During a game,
+tap the top, bottom, left, or right screen edge for directional input, or use
+the existing on-screen direction pads.
 
 The mod also includes a **Barcode** app with on-screen entry for **Code 128**
 and **EAN-13**, plus a **QR Codes** app that displays named codes saved through

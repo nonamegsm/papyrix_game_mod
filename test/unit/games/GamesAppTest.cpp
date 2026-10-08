@@ -87,6 +87,12 @@ Event tapDpad(int visualIndex) {
   return tap(visualIndex * w / 4 + w / 8, h - 50 - 72 + 36);
 }
 
+Event tapTopEdge() { return tap(renderer.getScreenWidth() / 2, 8); }
+
+Event tapLeftEdge() { return tap(8, renderer.getScreenHeight() / 2); }
+
+Event tapCenterBoard() { return tap(renderer.getScreenWidth() / 2, renderer.getScreenHeight() / 2); }
+
 void startSelectedGame(Core& core, int row, unsigned long now = 100) {
   testSetManualMillis(now);
   resetApp(core);
@@ -133,6 +139,24 @@ std::string testName(const char* prefix, int gameRow, const char* sizeName) {
   char text[96];
   std::snprintf(text, sizeof(text), "%s game %d at %s", prefix, gameRow, sizeName);
   return text;
+}
+
+bool rectsEqual(const std::vector<GfxRenderer::RectCall>& lhs, const std::vector<GfxRenderer::RectCall>& rhs) {
+  if (lhs.size() != rhs.size()) return false;
+  for (size_t i = 0; i < lhs.size(); ++i) {
+    if (lhs[i].x != rhs[i].x || lhs[i].y != rhs[i].y || lhs[i].w != rhs[i].w || lhs[i].h != rhs[i].h ||
+        lhs[i].color != rhs[i].color) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::vector<GfxRenderer::RectCall> fallingRectsAfterInput(Core& core, Event input) {
+  startSelectedGame(core, 2);
+  handleEvent(core, input);
+  renderFresh(core);
+  return renderer.fillRects();
 }
 
 }  // namespace
@@ -220,6 +244,18 @@ int main() {
   }
 
   {
+    setTurnBasedSnake(core);
+    runner.expectTrue(handleEvent(core, tapLeftEdge()), "turn-based snake left edge reverse input is consumed");
+    runner.expectFalse(update(core), "turn-based snake rejected left edge reverse input does not redraw");
+  }
+
+  {
+    setTurnBasedSnake(core);
+    runner.expectTrue(handleEvent(core, tapTopEdge()), "turn-based snake top edge input is consumed");
+    runner.expectTrue(update(core), "turn-based snake top edge input steps and redraws");
+  }
+
+  {
     startSelectedGame(core, 2);
     runner.expectTrue(handleEvent(core, press(Button::Center)), "center opens blocks pause menu");
     update(core);
@@ -238,10 +274,32 @@ int main() {
   }
 
   {
+    const auto buttonUpRects = fallingRectsAfterInput(core, press(Button::Up));
+    const auto topEdgeRects = fallingRectsAfterInput(core, tapTopEdge());
+    runner.expectTrue(rectsEqual(buttonUpRects, topEdgeRects), "falling blocks top edge matches up-button rotation");
+  }
+
+  {
     startSelectedGame(core, 1);
     runner.expectTrue(handleEvent(core, press(Button::Back)), "back while playing is consumed");
     renderFresh(core);
     runner.expectTrue(hasCenteredText("Games"), "back while playing returns to chooser");
+  }
+
+  {
+    resetApp(core);
+    runner.expectTrue(handleEvent(core, tapTopEdge()), "chooser consumes top edge tap");
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Games"), "chooser top edge tap does not launch gameplay");
+  }
+
+  {
+    startSelectedGame(core, 1);
+    handleEvent(core, press(Button::Center));
+    update(core);
+    runner.expectTrue(handleEvent(core, tapTopEdge()), "pause menu consumes top edge tap");
+    testSetManualMillis(10000);
+    runner.expectFalse(update(core), "pause menu top edge tap does not resume gameplay");
   }
 
   {
@@ -252,12 +310,37 @@ int main() {
 
   {
     startSelectedGame(core, 1);
+    core.settings.frontButtonLayout = Settings::FrontLRBC;
+    runner.expectTrue(handleEvent(core, tapButtonBar(2)),
+                      "LRBC visual back button keeps footer priority while playing");
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Games"), "LRBC footer back returns from game instead of margin input");
+  }
+
+  {
+    startSelectedGame(core, 1);
+    core.settings.frontButtonLayout = Settings::FrontLRBC;
+    runner.expectTrue(handleEvent(core, tapButtonBar(3)),
+                      "LRBC visual center button keeps footer priority while playing");
+    update(core);
+    testSetManualMillis(10000);
+    runner.expectFalse(update(core), "LRBC footer center pauses instead of margin input");
+  }
+
+  {
+    startSelectedGame(core, 1);
     runner.expectTrue(handleEvent(core, tapDpad(0)), "playing touch dpad up is consumed");
   }
 
   {
     startSelectedGame(core, 2);
     runner.expectTrue(handleEvent(core, tapDpad(1)), "playing touch dpad down is consumed");
+  }
+
+  {
+    startSelectedGame(core, 1);
+    runner.expectTrue(handleEvent(core, tapCenterBoard()), "playing board center tap is consumed");
+    runner.expectFalse(update(core), "playing board center tap does not trigger gameplay input");
   }
 
   {

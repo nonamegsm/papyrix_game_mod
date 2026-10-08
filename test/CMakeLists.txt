@@ -1394,6 +1394,8 @@ foreach(TEST_SRC ${TEST_SOURCES})
         target_link_options(${TEST_NAME} PRIVATE -Wl,--gc-sections)
       endif()
     endif()
+  elseif(TEST_NAME STREQUAL "GameTouchMarginsTest")
+    add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
   elseif(TEST_NAME STREQUAL "GameModelsTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}

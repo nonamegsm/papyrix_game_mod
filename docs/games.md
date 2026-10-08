@@ -26,6 +26,13 @@ On the X4 Pro, use the four direction pads above the bottom button bar. The
 bottom bar also provides Games, Menu, Left, and Right controls. In the pause
 menu, tap an item to select it.
 
+You can also tap the **top, bottom, left, or right margin** of the game screen
+to send Up, Down, Left, or Right. The bottom margin is the strip immediately
+above the direction pads. These edge controls are active only during gameplay;
+the direction pads, footer, game chooser, and pause menu keep their normal
+controls. Top/bottom take priority at corners. In Falling Blocks, the top edge
+rotates and the bottom edge lowers the piece, just like the direction buttons.
+
 The display uses fast refreshes between occasional full refreshes to clear
 ghosting. Movement includes the display's refresh time, so these games play
 more slowly than on an LCD. Scores and boards are kept in memory only;

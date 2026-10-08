@@ -9,6 +9,7 @@
 #include "../core/Core.h"
 #include "../ui/Elements.h"
 #include "GameModels.h"
+#include "GameTouchMargins.h"
 #include "ThemeManager.h"
 
 extern GfxRenderer renderer;
@@ -244,6 +245,7 @@ void renderBoard() {
                         : game == Game::Snake ? (manual ? "Direction = one step" : "Slow pace - Menu to pause")
                                               : "Merge tiles to reach 2048";
   centered(h - 162, message, THEME.smallFontId);
+  centered(h - 140, "Tap top/bottom/left/right edges", THEME.smallFontId);
   constexpr const char* controls[] = {"Up", "Down", "Left", "Right"};
   for (int i = 0; i < 4; ++i) {
     const int x = i * w / 4, y = h - FOOTER_HEIGHT - CONTROL_HEIGHT;
@@ -287,6 +289,9 @@ bool handleEvent(Core& core, const Event& event) {
     if (index >= 0) {
       constexpr Button buttons[] = {Button::Up, Button::Down, Button::Left, Button::Right};
       button(buttons[index]);
+    } else {
+      const Button direction = touchMarginDirection(p, w, h);
+      if (direction != Button::Count) button(direction);
     }
   } else {
     const int count = screen == Screen::Chooser || game == Game::Tiles ? 3 : 4;
