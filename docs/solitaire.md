@@ -33,6 +33,9 @@ The touch footer's **Menu** opens the pause menu; **Games** returns to the
 chooser. The pause menu offers **Resume**, **New game**, **Undo**, and
 **Choose game**.
 
-Move all 52 cards to the foundations to win. Deals are shuffled, so some may
+Move all 52 cards to the foundations to win. A **You won!** dialog then offers
+**Close** to return to Games and **Play Again** to deal a new game. Touch either
+button, or select with the direction buttons and confirm with Center.
+Deals are shuffled, so some may
 be unwinnable. A new deal resets the undo history. Game state stays in memory
 for the current game; starting it again from the chooser deals a new deck.

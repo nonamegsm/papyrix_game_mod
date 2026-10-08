@@ -19,7 +19,7 @@ extern GfxRenderer renderer;
 namespace papyrix::games_app {
 namespace {
 
-enum class Screen : uint8_t { Chooser, Playing, Paused };
+enum class Screen : uint8_t { Chooser, Playing, Paused, Finished };
 enum class Game : uint8_t { Tiles, Snake, Blocks, Eggs, Solitaire };
 constexpr const char* NAMES[] = {"2048", "Snake", "Falling Blocks", "Nu, Pogodi!", "Solitaire (Klondike)"};
 constexpr int GAME_COUNT = sizeof(NAMES) / sizeof(NAMES[0]);
@@ -37,6 +37,7 @@ Screen screen = Screen::Chooser;
 Game game = Game::Tiles;
 int selected = 0;
 int pauseSelected = 0;
+int finishedSelected = 1;
 bool dirty = true;
 bool fullRefresh = true;
 bool manual = false;
@@ -46,7 +47,7 @@ uint8_t refreshCount = 0;
 bool ended() {
   switch (game) {
     case Game::Tiles:
-      return tiles.gameOver();
+      return tiles.gameOver() || tiles.won();
     case Game::Snake:
       return snake.gameOver() || snake.won();
     case Game::Blocks:
@@ -57,6 +58,13 @@ bool ended() {
       return solitaire_view::won();
   }
   return true;
+}
+
+void completeIfEnded() {
+  if (screen != Screen::Playing || !ended()) return;
+  screen = Screen::Finished;
+  finishedSelected = 1;
+  dirty = fullRefresh = true;
 }
 
 void start() {
@@ -82,6 +90,15 @@ void start() {
   screen = Screen::Playing;
   lastStep = millis();
   fullRefresh = dirty = true;
+}
+
+void finishAction(int choice) {
+  if (choice == 0) {
+    screen = Screen::Chooser;
+    dirty = fullRefresh = true;
+  } else {
+    start();
+  }
 }
 
 void pauseAction() {
@@ -190,6 +207,17 @@ void playButton(Button button) {
 }
 
 void button(Button btn) {
+  if (screen == Screen::Finished) {
+    if (btn == Button::Back) {
+      finishAction(0);
+    } else if (btn == Button::Center) {
+      finishAction(finishedSelected);
+    } else if (btn == Button::Up || btn == Button::Left || btn == Button::Down || btn == Button::Right) {
+      finishedSelected = btn == Button::Up || btn == Button::Left ? 0 : 1;
+      dirty = true;
+    }
+    return;
+  }
   if (screen == Screen::Playing) {
     playButton(btn);
     return;
@@ -216,6 +244,46 @@ void button(Button btn) {
 
 void centered(int y, const char* text, int font = -1) {
   renderer.drawCenteredText(font < 0 ? THEME.uiFontId : font, y, text, THEME.primaryTextBlack);
+}
+
+ui::touch::DialogLayout finishedLayout() {
+  const int width = std::min(420, renderer.getScreenWidth() - 32);
+  const int x = (renderer.getScreenWidth() - width) / 2;
+  const int y = (renderer.getScreenHeight() - 180) / 2;
+  const int buttonWidth = (width - 48) / 2;
+  return {{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(width), 180},
+          {{static_cast<int16_t>(x + 16), static_cast<int16_t>(y + 112), static_cast<int16_t>(buttonWidth), 52},
+           {static_cast<int16_t>(x + 32 + buttonWidth), static_cast<int16_t>(y + 112),
+            static_cast<int16_t>(buttonWidth), 52}}};
+}
+
+void renderFinished() {
+  const auto layout = finishedLayout();
+  const auto& panel = layout.bounds;
+  const bool ink = THEME.primaryTextBlack;
+  renderer.fillRect(0, renderer.getScreenHeight() - 168, renderer.getScreenWidth(), 168, !ink);
+  if (game == Game::Solitaire) {
+    renderer.fillRect(0, 45, renderer.getScreenWidth(), 32, !ink);
+    centered(52, "All foundations complete", THEME.smallFontId);
+  }
+  renderer.fillRect(panel.x, panel.y, panel.width, panel.height, !ink);
+  renderer.drawRect(panel.x, panel.y, panel.width, panel.height, ink);
+  const bool won = game == Game::Solitaire ? solitaire_view::won()
+                   : game == Game::Snake   ? snake.won()
+                   : game == Game::Tiles   ? tiles.won()
+                                           : false;
+  centered(panel.y + 20, won ? "You won!" : "Game over", THEME.readerFontId);
+  centered(panel.y + 65, NAMES[selected], THEME.smallFontId);
+  constexpr const char* labels[] = {"Close", "Play Again"};
+  for (int i = 0; i < 2; ++i) {
+    const auto& r = layout.choices[i];
+    const bool selectedChoice = finishedSelected == i;
+    if (selectedChoice) renderer.fillRect(r.x, r.y, r.width, r.height, ink);
+    renderer.drawRect(r.x, r.y, r.width, r.height, ink);
+    renderer.drawText(THEME.uiFontId, r.x + (r.width - renderer.getTextWidth(THEME.uiFontId, labels[i])) / 2,
+                      r.y + (r.height - renderer.getLineHeight(THEME.uiFontId)) / 2, labels[i],
+                      selectedChoice ? !ink : ink);
+  }
 }
 
 struct BoardLayout {
@@ -420,7 +488,7 @@ void renderBoard() {
   const int h = renderer.getScreenHeight(), w = renderer.getScreenWidth();
   const char* message = game == Game::Snake && snake.won()   ? "Board complete!"
                         : ended()                            ? "Game over - Menu to restart"
-                        : game == Game::Tiles && tiles.won() ? "2048 reached! Keep playing"
+                        : game == Game::Tiles && tiles.won() ? "2048 reached!"
                         : game == Game::Blocks               ? "Top: rotate   Down: lower"
                         : game == Game::Eggs
                             ? (manual ? "Basket tap = one step" : "Catch eggs - three misses end the game")
@@ -456,7 +524,18 @@ void enter(Core&) {
 
 void exit(Core&) { screen = Screen::Chooser; }
 
+#ifdef TEST_BUILD
+void load2048ForTest(const games::Game2048& board) {
+  tiles = board;
+  game = Game::Tiles;
+  selected = 0;
+  screen = Screen::Playing;
+  dirty = fullRefresh = true;
+}
+#endif
+
 bool handleEvent(Core& core, const Event& event) {
+  completeIfEnded();
   if (event.type == EventType::ButtonRepeat) return true;
   if (event.type == EventType::ButtonPress) {
     if (event.button == Button::Back && screen == Screen::Chooser) return false;
@@ -465,6 +544,11 @@ bool handleEvent(Core& core, const Event& event) {
   }
   if (event.type != EventType::Tap) return false;
   const auto p = ui::touch::Point{event.touch.x, event.touch.y};
+  if (screen == Screen::Finished) {
+    const int choice = ui::touch::dialogChoiceAt(p, finishedLayout());
+    if (choice >= 0) finishAction(choice);
+    return true;
+  }
   const int w = renderer.getScreenWidth(), h = renderer.getScreenHeight();
   const int action = ui::touch::semanticButtonBarIndex(p, w, h, core.settings.frontButtonLayout == Settings::FrontLRBC);
   if (action >= 0) {
@@ -528,6 +612,7 @@ bool update(Core&) {
       dirty |= game == Game::Snake ? snake.step() : game == Game::Eggs ? eggs.step() : blocks.step();
     }
   }
+  completeIfEnded();
   const bool changed = dirty;
   dirty = false;
   return changed;
@@ -537,8 +622,9 @@ bool render(Core&) {
   const uint32_t renderStarted = millis();
   renderer.clearScreen(THEME.backgroundColor);
   ui::title(renderer, THEME, THEME.screenMarginTop, screen == Screen::Chooser ? "Games" : NAMES[selected]);
-  if (screen == Screen::Playing) {
+  if (screen == Screen::Playing || screen == Screen::Finished) {
     renderBoard();
+    if (screen == Screen::Finished) renderFinished();
   } else {
     if (screen == Screen::Paused)
       centered(48, ended() ? (game == Game::Solitaire ? "You won!" : "Game over") : "Paused");

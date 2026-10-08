@@ -9,7 +9,7 @@ to start it. Back from the chooser returns to Apps.
 
 | Game | Controls | Goal |
 | --- | --- | --- |
-| 2048 | Up, Down, Left, Right slide the tiles | Merge equal tiles to reach 2048; you can keep playing afterward |
+| 2048 | Up, Down, Left, Right slide the tiles | Merge equal tiles to reach 2048 |
 | Snake | Up, Down, Left, Right steer | Eat the outlined food; avoid the walls and your own body |
 | Falling Blocks | Left/Right move, Up rotates, Down lowers one row | Fill horizontal rows to clear them |
 | Nu, Pogodi! | Up/Down select the basket height; Left/Right select its side. Touch a chute or one of the four basket pads to select a position directly | Catch eggs from four chutes; one point per catch, three misses end the game |
@@ -18,6 +18,14 @@ to start it. Back from the chooser returns to Apps.
 In the directional games, Center opens the pause menu. Select **Resume**, **New game**,
 or **Choose game**. Back from a game returns to the game chooser. Back from
 the pause menu resumes. Hold Power to sleep, as in the other apps.
+
+When a game ends, an automatic **Game over** or **You won!** dialog offers
+**Close** (return to the Games chooser) and **Play Again** (restart the same
+game). Timers and board input stop while it is open. Tap either button, or
+use Left/Up for Close, Right/Down for Play Again, and Center to confirm.
+Back closes it. 2048 shows the win dialog when a tile reaches 2048, or Game
+over when no legal moves remain. Solitaire shows the win dialog after all
+four foundations are complete; the other games show it when they finish.
 
 Solitaire uses Center to select/move and Back to open its menu. Its touch
 footer provides **Games** and **Menu**, and its pause menu replaces the pace

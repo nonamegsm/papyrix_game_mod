@@ -313,6 +313,17 @@ void reset(uint32_t seed) {
   invalidFlash = false;
 }
 
+#ifdef TEST_BUILD
+void loadForTest(const games::Solitaire& game) {
+  model = game;
+  cursorPile = STOCK_SLOT;
+  cursorIndex = 0;
+  clearSelection();
+  std::fill(std::begin(scrolls), std::end(scrolls), 0);
+  invalidFlash = false;
+}
+#endif
+
 bool handleButton(Button button) {
   invalidFlash = false;
   if (button == Button::Back || button == Button::Power || button == Button::Count) return false;

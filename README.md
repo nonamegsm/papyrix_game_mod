@@ -33,6 +33,15 @@ The project retains the upstream MIT license and documentation below.
 
 ## Solitaire screen previews
 
+All five games automatically open a **Close / Play Again** dialog when they
+finish. Close returns to Games; Play Again restarts the current game. 2048
+also opens the win dialog on reaching 2048, and Solitaire on completing all
+four foundations.
+
+| Game over | Victory |
+| :---: | :---: |
+| <img src="docs/images/game-mod/completion-gameover-preview.png" width="240" alt="Game over dialog with Close and Play Again buttons"> | <img src="docs/images/game-mod/completion-win-preview.png" width="240" alt="Solitaire victory dialog with Close and Play Again buttons"> |
+
 These host previews show draw-one Klondike with the seven-column deal,
 stock/waste, foundations, and Stock/Undo/Auto controls. Fonts are illustrative;
 physical-device gameplay testing is pending.

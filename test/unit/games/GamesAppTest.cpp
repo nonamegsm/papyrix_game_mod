@@ -11,9 +11,11 @@
 #include <string>
 #include <vector>
 
+#include "apps/GameModels.h"
 #include "apps/GamesApp.h"
 #include "apps/NuPogodiArtwork.h"
 #include "apps/SolitaireModel.h"
+#include "apps/SolitaireView.h"
 #include "content/ContentHandle.h"
 #include "core/Core.h"
 #include "test_utils.h"
@@ -25,6 +27,27 @@ ContentHandle::ContentHandle() : type(ContentType::None) {}
 ContentHandle::~ContentHandle() {}
 }  // namespace papyrix
 
+namespace papyrix::games {
+
+struct SolitaireTestAccess {
+  static void clear(Solitaire& game) {
+    game.clearState();
+    game.historyNext_ = 0;
+    game.historyCount_ = 0;
+  }
+
+  static void setPile(Solitaire& game, int pile, const uint8_t* cards, int count) {
+    game.state_.counts[pile] = static_cast<uint8_t>(count);
+    game.state_.faceMask[pile] = 0;
+    for (int i = 0; i < count; ++i) {
+      game.state_.cards[pile][i] = cards[i];
+      game.setFaceUp(game.state_, pile, i, true);
+    }
+  }
+};
+
+}  // namespace papyrix::games
+
 papyrix::hal::Display display;
 GfxRenderer renderer(display);
 
@@ -34,6 +57,7 @@ using papyrix::Button;
 using papyrix::Core;
 using papyrix::Event;
 using papyrix::Settings;
+using papyrix::games::Game2048;
 using papyrix::games::Solitaire;
 using papyrix::games_app::enter;
 using papyrix::games_app::handleEvent;
@@ -80,6 +104,12 @@ struct SolitaireMoveForTest {
   int fromPile;
   int fromIndex;
   int toPile;
+};
+
+struct FinishDialogForTest {
+  TestRect panel;
+  TestRect close;
+  TestRect again;
 };
 
 constexpr ScreenSize kScreenSizes[] = {
@@ -183,6 +213,16 @@ bool rectsStayOnScreen(const std::vector<GfxRenderer::RectCall>& rects) {
   return true;
 }
 
+bool testRectsStayOnScreen(const std::vector<TestRect>& rects) {
+  for (const auto& rect : rects) {
+    if (rect.w <= 0 || rect.h <= 0) return false;
+    if (rect.x < 0 || rect.y < 0) return false;
+    if (rect.x + rect.w > renderer.getScreenWidth()) return false;
+    if (rect.y + rect.h > renderer.getScreenHeight()) return false;
+  }
+  return true;
+}
+
 std::vector<GfxRenderer::RectCall> controlRects() {
   std::vector<GfxRenderer::RectCall> rects;
   const int y = renderer.getScreenHeight() - 50 - 72 + 4;
@@ -205,6 +245,28 @@ bool linesStayOnScreen(const std::vector<GfxRenderer::LineCall>& lines) {
   }
   return true;
 }
+
+FinishDialogForTest finishDialogForTest() {
+  const int w = renderer.getScreenWidth();
+  const int h = renderer.getScreenHeight();
+  const int panelW = std::min(420, w - 32);
+  const int panelH = 180;
+  const int panelX = (w - panelW) / 2;
+  const int panelY = (h - panelH) / 2;
+  const int buttonW = (panelW - 48) / 2;
+  return {{panelX, panelY, panelW, panelH},
+          {panelX + 16, panelY + 112, buttonW, 52},
+          {panelX + 32 + buttonW, panelY + 112, buttonW, 52}};
+}
+
+bool hasRect(const TestRect& expected) {
+  const auto& rects = renderer.drawRects();
+  return std::any_of(rects.begin(), rects.end(), [&](const GfxRenderer::RectCall& rect) {
+    return rect.x == expected.x && rect.y == expected.y && rect.w == expected.w && rect.h == expected.h;
+  });
+}
+
+Event tapRectCenter(const TestRect& rect) { return tap(rect.x + rect.w / 2, rect.y + rect.h / 2); }
 
 SolitaireLayoutForTest solitaireLayoutForTest() {
   const int w = renderer.getScreenWidth();
@@ -280,6 +342,70 @@ bool findLegalSolitaireMove(SolitaireMoveForTest& out) {
       }
     }
     if (!game.draw()) break;
+  }
+  return false;
+}
+
+uint8_t solitaireCard(int suit, int rank) { return static_cast<uint8_t>(suit * 13 + rank - 1); }
+
+Solitaire winningSolitaireForTest() {
+  Solitaire game;
+  papyrix::games::SolitaireTestAccess::clear(game);
+  for (int suit = 0; suit < 4; ++suit) {
+    uint8_t cards[13] = {};
+    for (int rank = 1; rank <= 13; ++rank) cards[rank - 1] = solitaireCard(suit, rank);
+    papyrix::games::SolitaireTestAccess::setPile(game, Solitaire::FOUNDATION_FIRST + suit, cards, 13);
+  }
+  return game;
+}
+
+void load2048BoardForTest(Core& core, const Game2048& board) {
+  startSelectedGame(core, 0);
+#ifdef TEST_BUILD
+  papyrix::games_app::load2048ForTest(board);
+#endif
+  update(core);
+}
+
+Game2048 won2048ForTest() {
+  Game2048 game;
+  game.clear();
+  game.setTile(0, 0, 2048);
+  return game;
+}
+
+Game2048 blocked2048ForTest() {
+  Game2048 game;
+  game.clear();
+  for (int row = 0; row < Game2048::SIZE; ++row) {
+    for (int col = 0; col < Game2048::SIZE; ++col) {
+      game.setTile(row, col, ((row + col) % 2 == 0) ? 2 : 4);
+    }
+  }
+  return game;
+}
+
+void openSolitaireWinDialog(Core& core) {
+  startSelectedGame(core, kSolitaireRow);
+#ifdef TEST_BUILD
+  papyrix::games_app::solitaire_view::loadForTest(winningSolitaireForTest());
+#endif
+  update(core);
+}
+
+bool renderShows(Core& core, const std::string& text) {
+  renderFresh(core);
+  return hasCenteredText(text) || hasDrawnText(text);
+}
+
+bool advanceUntilCentered(Core& core, const std::string& text, int steps, unsigned long stepMs) {
+  unsigned long now = 100;
+  for (int i = 0; i < steps; ++i) {
+    now += stepMs;
+    testSetManualMillis(now);
+    update(core);
+    renderFresh(core);
+    if (hasCenteredText(text)) return true;
   }
   return false;
 }
@@ -401,6 +527,33 @@ void setEggPace(Core& core, bool turnBased, unsigned long now = 100) {
   }
   handleEvent(core, press(Button::Back));
   update(core);
+}
+
+bool openSnakeGameOverDialog(Core& core) {
+  setTurnBasedSnake(core);
+  for (int i = 0; i < 20; ++i) {
+    handleEvent(core, press(Button::Right));
+    update(core);
+    renderFresh(core);
+    if (hasCenteredText("Game over")) return true;
+  }
+  return false;
+}
+
+bool openEggGameOverDialog(Core& core) {
+  setEggPace(core, false);
+  return advanceUntilCentered(core, "Game over", 200, 1100);
+}
+
+bool openBlocksGameOverDialog(Core& core) {
+  startSelectedGame(core, 2);
+  for (int i = 0; i < 500; ++i) {
+    testSetManualMillis(100 + (i + 1) * 2000UL);
+    update(core);
+    renderFresh(core);
+    if (hasCenteredText("Game over")) return true;
+  }
+  return false;
 }
 
 struct CapturedFrame {
@@ -616,6 +769,24 @@ void exportScreens(Core& core, const char* outputPath) {
     update(core);
     renderFresh(core);
     frames.push_back(captureFrame((std::string("solitaire-stockdraw-") + size.name).c_str()));
+
+    openSolitaireWinDialog(core);
+    renderFresh(core);
+    frames.push_back(captureFrame((std::string("completion-solitaire-win-") + size.name).c_str()));
+
+    openEggGameOverDialog(core);
+    renderFresh(core);
+    frames.push_back(captureFrame((std::string("completion-egg-gameover-") + size.name).c_str()));
+
+    if (size.width == 480 && size.height == 800) {
+      load2048BoardForTest(core, won2048ForTest());
+      renderFresh(core);
+      frames.push_back(captureFrame("completion-2048-win-portrait"));
+
+      openBlocksGameOverDialog(core);
+      renderFresh(core);
+      frames.push_back(captureFrame("completion-blocks-gameover-portrait"));
+    }
   }
   writeFramesJson(frames, outputPath);
 }
@@ -1052,6 +1223,158 @@ int main(int argc, char** argv) {
     runner.expectTrue(handleEvent(core, tapButtonBar(2)), "solitaire LRBC footer games is consumed");
     renderFresh(core);
     runner.expectTrue(hasCenteredText("Games"), "solitaire LRBC footer games returns to chooser");
+  }
+
+  {
+    openSolitaireWinDialog(core);
+    renderFresh(core);
+    const auto dialog = finishDialogForTest();
+    runner.expectTrue(hasCenteredText("You won!"), "solitaire win opens completion dialog");
+    runner.expectTrue(hasDrawnText("Close"), "completion dialog renders Close action");
+    runner.expectTrue(hasDrawnText("Play Again"), "completion dialog renders Play Again action");
+    runner.expectTrue(hasRect(dialog.panel), "completion dialog renders expected panel rect");
+    runner.expectTrue(hasRect(dialog.close), "completion dialog renders expected close button rect");
+    runner.expectTrue(hasRect(dialog.again), "completion dialog renders expected play-again button rect");
+    runner.expectTrue(renderer.getTextWidth(0, "Play Again") <= dialog.again.w,
+                      "completion dialog play-again label fits button");
+  }
+
+  for (const auto& size : kScreenSizes) {
+    renderer.setScreenSize(size.width, size.height);
+    openSolitaireWinDialog(core);
+    renderFresh(core);
+    const auto dialog = finishDialogForTest();
+    runner.expectTrue(testRectsStayOnScreen({dialog.panel, dialog.close, dialog.again}),
+                      testName("completion dialog rects stay inside", kSolitaireRow, size.name));
+    runner.expectTrue(hasRect(dialog.panel), testName("completion dialog panel rect", kSolitaireRow, size.name));
+    runner.expectTrue(hasRect(dialog.close), testName("completion dialog close rect", kSolitaireRow, size.name));
+    runner.expectTrue(hasRect(dialog.again), testName("completion dialog again rect", kSolitaireRow, size.name));
+  }
+  renderer.setScreenSize(480, 800);
+
+  {
+    openSolitaireWinDialog(core);
+    runner.expectTrue(handleEvent(core, press(Button::Center)), "completion dialog defaults center to Play Again");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Moves: 0"), "completion Play Again starts current solitaire game over");
+    runner.expectTrue(hasDrawnText("24"), "completion Play Again resets solitaire stock count");
+  }
+
+  {
+    openSolitaireWinDialog(core);
+    handleEvent(core, press(Button::Left));
+    runner.expectTrue(handleEvent(core, press(Button::Center)), "completion left then center chooses Close");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Games"), "completion Close returns to chooser");
+  }
+
+  {
+    openSolitaireWinDialog(core);
+    runner.expectTrue(handleEvent(core, press(Button::Back)), "completion Back closes dialog");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Games"), "completion Back returns to chooser");
+  }
+
+  {
+    openSolitaireWinDialog(core);
+    const auto dialog = finishDialogForTest();
+    runner.expectTrue(handleEvent(core, tapRectCenter(dialog.close)), "completion close tap is consumed");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Games"), "completion close tap returns to chooser");
+  }
+
+  {
+    openSolitaireWinDialog(core);
+    const auto dialog = finishDialogForTest();
+    runner.expectTrue(handleEvent(core, tapRectCenter(dialog.again)), "completion play-again tap is consumed");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Moves: 0"), "completion play-again tap restarts current game");
+  }
+
+  {
+    openSolitaireWinDialog(core);
+    runner.expectTrue(handleEvent(core, tap(2, 2)), "completion outside tap is consumed");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("You won!"), "completion outside tap leaves dialog open");
+    runner.expectTrue(handleEvent(core, tapDpad(0)), "completion dpad-area tap is consumed");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("You won!"), "completion dpad-area tap leaves dialog open");
+  }
+
+  {
+    openSolitaireWinDialog(core);
+    runner.expectTrue(handleEvent(core, tapButtonBar(0)), "completion normal footer games tap is consumed");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("You won!"), "completion normal footer games does not dismiss");
+    runner.expectTrue(handleEvent(core, tapButtonBar(1)), "completion normal footer menu tap is consumed");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("You won!"), "completion normal footer menu does not dismiss");
+  }
+
+  {
+    openSolitaireWinDialog(core);
+    core.settings.frontButtonLayout = Settings::FrontLRBC;
+    runner.expectTrue(handleEvent(core, tapButtonBar(2)), "completion LRBC footer games tap is consumed");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("You won!"), "completion LRBC footer games does not dismiss");
+    runner.expectTrue(handleEvent(core, tapButtonBar(3)), "completion LRBC footer menu tap is consumed");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("You won!"), "completion LRBC footer menu does not dismiss");
+  }
+
+  {
+    runner.expectTrue(openSnakeGameOverDialog(core), "snake terminal state opens completion dialog");
+    runner.expectTrue(hasCenteredText("Game over"), "snake completion dialog title is game over");
+  }
+
+  {
+    runner.expectTrue(openEggGameOverDialog(core), "Nu, Pogodi terminal misses open completion dialog");
+    runner.expectTrue(hasCenteredText("Game over"), "Nu, Pogodi completion dialog title is game over");
+    testSetManualMillis(1000000);
+    runner.expectFalse(update(core), "completion dialog freezes timers");
+  }
+
+  {
+    load2048BoardForTest(core, won2048ForTest());
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("You won!"), "2048 winning tile opens completion dialog");
+    runner.expectTrue(handleEvent(core, press(Button::Center)), "2048 win completion defaults to Play Again");
+    update(core);
+    renderFresh(core);
+    runner.expectFalse(hasCenteredText("You won!"), "2048 Play Again dismisses completion dialog");
+    runner.expectTrue(hasCenteredText("Score: 0"), "2048 Play Again resets score");
+  }
+
+  {
+    load2048BoardForTest(core, blocked2048ForTest());
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Game over"), "2048 blocked checkerboard opens game-over dialog");
+    handleEvent(core, press(Button::Left));
+    runner.expectTrue(handleEvent(core, press(Button::Center)), "2048 game-over completion close is selected");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Games"), "2048 completion Close returns to chooser");
+  }
+
+  {
+    runner.expectTrue(openBlocksGameOverDialog(core), "falling blocks terminal state opens completion dialog");
+    runner.expectTrue(hasCenteredText("Game over"), "falling blocks completion dialog title is game over");
+    runner.expectTrue(handleEvent(core, press(Button::Center)), "falling blocks completion defaults to Play Again");
+    update(core);
+    renderFresh(core);
+    runner.expectTrue(hasCenteredText("Falling Blocks"), "falling blocks Play Again restarts current game");
+    runner.expectFalse(hasCenteredText("Game over"), "falling blocks Play Again dismisses completion dialog");
   }
 
   {
