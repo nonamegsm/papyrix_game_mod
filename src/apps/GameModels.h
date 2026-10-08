@@ -104,4 +104,36 @@ class FallingBlocks {
   void clearLines();
 };
 
+class EggCatcher {
+ public:
+  static constexpr int LANES = 4;
+  static constexpr int POSITIONS = 6;
+  static constexpr int MAX_MISSES = 3;
+
+  void reset(uint32_t seed = 1);
+  bool selectLane(int lane);
+  bool step();
+  bool egg(int lane, int position) const;
+  int basketLane() const { return basketLane_; }
+  uint32_t score() const { return score_; }
+  uint8_t misses() const { return misses_; }
+  bool gameOver() const { return gameOver_; }
+  uint32_t stepIntervalMs() const;
+
+ private:
+  friend struct GameModelTestAccess;
+
+  bool eggs_[LANES][POSITIONS] = {};
+  uint32_t rng_ = 1;
+  uint32_t score_ = 0;
+  uint8_t misses_ = 0;
+  uint8_t basketLane_ = 0;
+  uint8_t stepsSinceSpawn_ = 0;
+  bool gameOver_ = false;
+
+  uint32_t nextRandom();
+  void clearEggs();
+  void spawnEgg();
+};
+
 }  // namespace papyrix::games

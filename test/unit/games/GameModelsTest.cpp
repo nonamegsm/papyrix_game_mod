@@ -3,6 +3,7 @@
 #include "test_utils.h"
 
 using papyrix::games::Direction;
+using papyrix::games::EggCatcher;
 using papyrix::games::FallingBlocks;
 using papyrix::games::Game2048;
 using papyrix::games::Snake;
@@ -48,6 +49,25 @@ struct GameModelTestAccess {
     blocks.pieceY_ = y;
     blocks.gameOver_ = false;
   }
+
+  static void clearEggs(EggCatcher& game) {
+    for (auto& lane : game.eggs_) {
+      for (bool& cell : lane) {
+        cell = false;
+      }
+    }
+    game.stepsSinceSpawn_ = 0;
+    game.gameOver_ = false;
+  }
+
+  static void setEgg(EggCatcher& game, int lane, int position, bool value) { game.eggs_[lane][position] = value; }
+
+  static void setEggState(EggCatcher& game, int basketLane, uint32_t score, uint8_t misses, bool gameOver = false) {
+    game.basketLane_ = static_cast<uint8_t>(basketLane);
+    game.score_ = score;
+    game.misses_ = misses;
+    game.gameOver_ = gameOver;
+  }
 };
 
 }  // namespace papyrix::games
@@ -82,6 +102,40 @@ int countBlockCells(const FallingBlocks& blocks) {
     }
   }
   return count;
+}
+
+int countEggs(const EggCatcher& game) {
+  int count = 0;
+  for (int lane = 0; lane < EggCatcher::LANES; lane++) {
+    for (int position = 0; position < EggCatcher::POSITIONS; position++) {
+      if (game.egg(lane, position)) count++;
+    }
+  }
+  return count;
+}
+
+int countEggsAtPosition(const EggCatcher& game, int position) {
+  int count = 0;
+  for (int lane = 0; lane < EggCatcher::LANES; lane++) {
+    if (game.egg(lane, position)) count++;
+  }
+  return count;
+}
+
+int eggLaneAtPosition(const EggCatcher& game, int position) {
+  for (int lane = 0; lane < EggCatcher::LANES; lane++) {
+    if (game.egg(lane, position)) return lane;
+  }
+  return -1;
+}
+
+bool sameEggGrid(const EggCatcher& left, const EggCatcher& right) {
+  for (int lane = 0; lane < EggCatcher::LANES; lane++) {
+    for (int position = 0; position < EggCatcher::POSITIONS; position++) {
+      if (left.egg(lane, position) != right.egg(lane, position)) return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace
@@ -279,6 +333,117 @@ int main() {
     runner.expectEq(uint16_t(2), blocks.lines(), "blocks clears adjacent completed lines");
     runner.expectEq(uint32_t(400), blocks.score(), "blocks scores multi-line clear");
     runner.expectFalse(blocks.settled(4, 19), "blocks compacts cleared rows away");
+  }
+
+  {
+    EggCatcher seedZero;
+    EggCatcher seedOne;
+    EggCatcher seedAgain;
+    seedZero.reset(0);
+    seedOne.reset(1);
+    seedAgain.reset(1);
+    runner.expectEq(1, countEggs(seedZero), "egg catcher reset spawns a visible egg");
+    runner.expectTrue(sameEggGrid(seedZero, seedOne), "egg catcher seed zero normalizes to seed one");
+    runner.expectTrue(sameEggGrid(seedOne, seedAgain), "egg catcher reset is deterministic for a seed");
+    runner.expectEq(uint32_t(1100), seedOne.stepIntervalMs(), "egg catcher starts at e-paper safe interval");
+  }
+
+  {
+    EggCatcher game;
+    game.reset(3);
+    const int startLane = eggLaneAtPosition(game, 0);
+    runner.expectTrue(game.step(), "egg catcher advances initial egg");
+    runner.expectFalse(game.egg(startLane, 0), "egg catcher vacates previous position");
+    runner.expectTrue(game.egg(startLane, 1), "egg catcher moves egg toward basket");
+    runner.expectTrue(game.step(), "egg catcher spawn cadence advances");
+    runner.expectTrue(game.egg(startLane, 2), "egg catcher keeps moving existing egg");
+    runner.expectEq(2, countEggs(game), "egg catcher spawns globally every second step");
+  }
+
+  {
+    EggCatcher game;
+    for (int lane = 0; lane < EggCatcher::LANES; lane++) {
+      game.reset(5);
+      papyrix::games::GameModelTestAccess::clearEggs(game);
+      papyrix::games::GameModelTestAccess::setEgg(game, lane, EggCatcher::POSITIONS - 1, true);
+      papyrix::games::GameModelTestAccess::setEggState(game, lane, 0, 0);
+      runner.expectTrue(game.step(), "egg catcher resolves catch for every lane");
+      runner.expectEq(uint32_t(1), game.score(), "egg catcher caught egg increments score");
+      runner.expectEq(uint8_t(0), game.misses(), "egg catcher caught egg avoids miss");
+    }
+  }
+
+  {
+    EggCatcher game;
+    game.reset(7);
+    papyrix::games::GameModelTestAccess::clearEggs(game);
+    papyrix::games::GameModelTestAccess::setEgg(game, 1, EggCatcher::POSITIONS - 1, true);
+    papyrix::games::GameModelTestAccess::setEggState(game, 0, 0, 0);
+    runner.expectTrue(game.step(), "egg catcher resolves missed egg");
+    runner.expectEq(uint32_t(0), game.score(), "egg catcher miss does not increment score");
+    runner.expectEq(uint8_t(1), game.misses(), "egg catcher miss increments misses");
+
+    papyrix::games::GameModelTestAccess::clearEggs(game);
+    papyrix::games::GameModelTestAccess::setEgg(game, 2, EggCatcher::POSITIONS - 1, true);
+    papyrix::games::GameModelTestAccess::setEggState(game, 0, 0, 2);
+    runner.expectTrue(game.step(), "egg catcher third miss changes state");
+    runner.expectTrue(game.gameOver(), "egg catcher ends after three misses");
+    runner.expectFalse(game.selectLane(2), "egg catcher ignores input after game over");
+    runner.expectFalse(game.step(), "egg catcher ignores steps after game over");
+  }
+
+  {
+    EggCatcher game;
+    game.reset(9);
+    runner.expectFalse(game.egg(-1, 0), "egg catcher rejects negative lane query");
+    runner.expectFalse(game.egg(0, -1), "egg catcher rejects negative position query");
+    runner.expectFalse(game.egg(EggCatcher::LANES, 0), "egg catcher rejects out-of-range lane query");
+    runner.expectFalse(game.egg(0, EggCatcher::POSITIONS), "egg catcher rejects out-of-range position query");
+    runner.expectFalse(game.selectLane(-1), "egg catcher rejects negative lane selection");
+    runner.expectFalse(game.selectLane(EggCatcher::LANES), "egg catcher rejects out-of-range lane selection");
+    runner.expectFalse(game.selectLane(game.basketLane()), "egg catcher reports unchanged basket lane");
+    runner.expectTrue(game.selectLane(3), "egg catcher accepts valid lane selection");
+    runner.expectEq(3, game.basketLane(), "egg catcher stores selected basket lane");
+  }
+
+  {
+    EggCatcher game;
+    game.reset(11);
+    for (int i = 0; i < 40; i++) {
+      runner.expectTrue(countEggsAtPosition(game, EggCatcher::POSITIONS - 1) <= 1,
+                        "egg catcher never presents simultaneous basket arrivals");
+      const int catchingLane = eggLaneAtPosition(game, EggCatcher::POSITIONS - 1);
+      if (catchingLane >= 0) {
+        game.selectLane(catchingLane);
+      }
+      game.step();
+      runner.expectFalse(game.gameOver(), "egg catcher schedule remains catchable");
+    }
+  }
+
+  {
+    EggCatcher game;
+    game.reset(13);
+    papyrix::games::GameModelTestAccess::clearEggs(game);
+    papyrix::games::GameModelTestAccess::setEgg(game, 1, EggCatcher::POSITIONS - 1, true);
+    papyrix::games::GameModelTestAccess::setEggState(game, 0, 0, 2);
+    game.step();
+    runner.expectTrue(game.gameOver(), "egg catcher fixture reaches game over");
+    game.reset(13);
+    runner.expectFalse(game.gameOver(), "egg catcher reset clears game over");
+    runner.expectEq(uint8_t(0), game.misses(), "egg catcher reset clears misses");
+    runner.expectEq(uint32_t(0), game.score(), "egg catcher reset clears score");
+    runner.expectEq(1, countEggs(game), "egg catcher reset repopulates visible egg");
+  }
+
+  {
+    EggCatcher game;
+    game.reset(15);
+    const uint32_t startInterval = game.stepIntervalMs();
+    papyrix::games::GameModelTestAccess::setEggState(game, game.basketLane(), 5, 0);
+    runner.expectTrue(game.stepIntervalMs() < startInterval, "egg catcher speeds up as score rises");
+    papyrix::games::GameModelTestAccess::setEggState(game, game.basketLane(), 100, 0);
+    runner.expectEq(uint32_t(650), game.stepIntervalMs(), "egg catcher interval floor protects e-paper");
   }
 
   runner.printSummary();

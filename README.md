@@ -1,11 +1,12 @@
 # PapyriX Game Mod
 
 This fork of [bigbag/papyrix-reader](https://github.com/bigbag/papyrix-reader),
-based on PapyriX **v1.31.0**, adds offline **2048**, **Snake**, and **Falling Blocks**
+based on PapyriX **v1.31.0**, adds offline **2048**, **Snake**, **Falling Blocks**, and **Nu, Pogodi!**
 to **Apps > Games**. It includes pause/restart controls, slow and turn-based play,
 physical-button controls, and touch controls for the X4 Pro. During a game,
 tap the top, bottom, left, or right screen edge for directional input, or use
-the existing on-screen direction pads.
+the existing on-screen direction pads. Nu, Pogodi! adds four basket positions,
+direct chute taps, egg-catching scores, and a three-miss game-over rule.
 
 The mod also includes a **Barcode** app with on-screen entry for **Code 128**
 and **EAN-13**, plus a **QR Codes** app that displays named codes saved through
@@ -18,10 +19,24 @@ firmware with `pio run -e release_x4pro`; the image is
 image for your device.
 
 See [game controls](docs/games.md) and the upstream [firmware update instructions](docs/user_guide.md).
-Both firmware targets compiled successfully. Validation includes 102 game-model
-and game-interface checks plus 56 existing navigation/input checks.
+Validation covers game models, menus, touch controls, timers, and layout in
+portrait and landscape. The Nu, Pogodi! guide includes its basket controls and
+slow/turn-based modes.
 
 The project retains the upstream MIT license and documentation below.
+
+## Nu, Pogodi! screen previews
+
+Catch eggs from four chutes, move the wolf's basket between four positions,
+and avoid three misses. Play at a slow automatic pace or advance one step
+per basket input. See the [game controls](docs/games.md#nu-pogodi).
+
+These are host previews generated from the game's rendering calls, with
+illustrative fonts. Physical-device testing of this game is pending.
+
+| Portrait | Landscape |
+| :---: | :---: |
+| <img src="docs/images/game-mod/nu-pogodi-portrait-preview.png" width="240" alt="Nu, Pogodi host preview with four egg chutes and basket touch controls in portrait"> | <img src="docs/images/game-mod/nu-pogodi-landscape-preview.png" width="400" alt="Nu, Pogodi host preview showing the four basket positions in landscape"> |
 
 ## Barcode and QR screen previews
 

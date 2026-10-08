@@ -18,8 +18,10 @@ namespace papyrix::games_app {
 namespace {
 
 enum class Screen : uint8_t { Chooser, Playing, Paused };
-enum class Game : uint8_t { Tiles, Snake, Blocks };
-constexpr const char* NAMES[] = {"2048", "Snake", "Falling Blocks"};
+enum class Game : uint8_t { Tiles, Snake, Blocks, Eggs };
+constexpr const char* NAMES[] = {"2048", "Snake", "Falling Blocks", "Nu, Pogodi!"};
+constexpr int GAME_COUNT = sizeof(NAMES) / sizeof(NAMES[0]);
+constexpr const char* BASKET_NAMES[] = {"Upper left", "Lower left", "Upper right", "Lower right"};
 constexpr int LIST_Y = 80;
 constexpr int ROW_HEIGHT = 44;
 constexpr int CONTROL_HEIGHT = 72;
@@ -28,6 +30,7 @@ constexpr int FOOTER_HEIGHT = 50;
 games::Game2048 tiles;
 games::Snake snake;
 games::FallingBlocks blocks;
+games::EggCatcher eggs;
 Screen screen = Screen::Chooser;
 Game game = Game::Tiles;
 int selected = 0;
@@ -46,6 +49,8 @@ bool ended() {
       return snake.gameOver() || snake.won();
     case Game::Blocks:
       return blocks.gameOver();
+    case Game::Eggs:
+      return eggs.gameOver();
   }
   return true;
 }
@@ -62,6 +67,9 @@ void start() {
       break;
     case Game::Blocks:
       blocks.reset(seed);
+      break;
+    case Game::Eggs:
+      eggs.reset(seed);
       break;
   }
   screen = Screen::Playing;
@@ -89,6 +97,12 @@ void pauseAction() {
       break;
   }
   dirty = true;
+}
+
+void selectBasket(int lane) {
+  if (ended()) return;
+  dirty |= eggs.selectLane(lane);
+  if (manual) dirty |= eggs.step();
 }
 
 void playButton(Button button) {
@@ -146,6 +160,15 @@ void playButton(Button button) {
           break;
       }
       break;
+    case Game::Eggs: {
+      int lane = eggs.basketLane();
+      if (button == Button::Up) lane &= 2;
+      if (button == Button::Down) lane |= 1;
+      if (button == Button::Left) lane &= 1;
+      if (button == Button::Right) lane |= 2;
+      selectBasket(lane);
+      break;
+    }
   }
 }
 
@@ -155,7 +178,7 @@ void button(Button btn) {
     return;
   }
   int& item = screen == Screen::Chooser ? selected : pauseSelected;
-  const int count = screen == Screen::Chooser || game == Game::Tiles ? 3 : 4;
+  const int count = screen == Screen::Chooser ? GAME_COUNT : game == Game::Tiles ? 3 : 4;
   if (btn == Button::Up || btn == Button::Left) {
     item = (item + count - 1) % count;
     dirty = true;
@@ -187,18 +210,92 @@ BoardLayout boardLayout(int columns, int rows) {
   return {(renderer.getScreenWidth() - columns * cell) / 2, 90, cell};
 }
 
+ui::touch::Rect eggPlayArea() {
+  return {16, 112, static_cast<int16_t>(renderer.getScreenWidth() - 32),
+          static_cast<int16_t>(renderer.getScreenHeight() - 284)};
+}
+
+// Small original pixel drawings, scaled to the available play area.
+void pixelSprite(const uint16_t* rows, int count, int x, int y, int scale, bool mirror) {
+  for (int row = 0; row < count; ++row) {
+    for (int col = 0; col < 16;) {
+      if (!(rows[row] & (0x8000u >> col))) {
+        ++col;
+        continue;
+      }
+      const int first = col;
+      while (col < 16 && (rows[row] & (0x8000u >> col))) ++col;
+      const int sx = mirror ? 16 - col : first;
+      renderer.fillRect(x + sx * scale, y + row * scale, (col - first) * scale, scale, THEME.primaryTextBlack);
+    }
+  }
+}
+
+void renderEggs() {
+  constexpr uint16_t WOLF[] = {0x1800, 0x3c00, 0x3e00, 0x7f00, 0xff80, 0xbff0, 0x7ffe, 0x3ffc,
+                               0x0ff0, 0x0e00, 0x3f00, 0x7f80, 0x7f80, 0x4200, 0x7f80, 0x7f80,
+                               0x4200, 0x7f80, 0xffc0, 0xfb80, 0x6380, 0x6380, 0x6300, 0x7780};
+  constexpr uint16_t HEN[] = {0x0600, 0x0f00, 0x1d80, 0x1fe0, 0x0fc0, 0x3f00,
+                              0x7f80, 0xff80, 0x7f00, 0x3e00, 0x1400, 0x3600};
+  constexpr uint16_t EGG[] = {0x1800, 0x2400, 0x4200, 0x8100, 0x8100, 0x8100, 0x8100, 0x4200, 0x3c00};
+  const auto area = eggPlayArea();
+  const int scale = std::max(2, std::min(area.width / 80, area.height / 60));
+  const int cx = renderer.getScreenWidth() / 2;
+  const int wolfY = area.y + area.height / 2 - 12 * scale;
+  const bool ink = THEME.primaryTextBlack;
+  const bool right = eggs.basketLane() >= 2;
+  renderer.drawRect(area.x, area.y, area.width, area.height, ink);
+  pixelSprite(WOLF, 24, cx - 8 * scale, wolfY, scale, !right);
+  for (int lane = 0; lane < games::EggCatcher::LANES; ++lane) {
+    const bool onRight = lane >= 2;
+    const int targetX = cx + (onRight ? 1 : -1) * area.width / 5;
+    const int sourceX = area.x + (onRight ? 7 : 1) * area.width / 8;
+    const int targetY = area.y + ((lane & 1) ? 2 : 1) * area.height / 3;
+    const int sourceY = targetY - area.height / 9;
+    pixelSprite(HEN, 12, sourceX - 8 * scale, sourceY - 13 * scale, scale, onRight);
+    renderer.drawLine(sourceX, sourceY + 8, targetX, targetY + 8, ink);
+    renderer.drawLine(sourceX, sourceY + 12, targetX, targetY + 12, ink);
+    for (int pos = 0; pos < games::EggCatcher::POSITIONS; ++pos) {
+      if (!eggs.egg(lane, pos)) continue;
+      const int x = sourceX + (targetX - sourceX) * pos / (games::EggCatcher::POSITIONS - 1);
+      const int y = sourceY + (targetY - sourceY) * pos / (games::EggCatcher::POSITIONS - 1);
+      const int eggScale = std::max(1, scale / 2);
+      pixelSprite(EGG, 9, x - 4 * eggScale, y - 8 * eggScale, eggScale, false);
+    }
+    const int basketY = targetY + 16;
+    renderer.drawRect(targetX - 4 * scale, basketY, 8 * scale, 4 * scale, ink);
+    if (lane == eggs.basketLane()) {
+      renderer.fillRect(targetX - 4 * scale, basketY + 2 * scale, 8 * scale, 2 * scale, ink);
+      renderer.drawLine(targetX - 4 * scale, basketY, targetX, basketY - 3 * scale, ink);
+      renderer.drawLine(targetX, basketY - 3 * scale, targetX + 4 * scale, basketY, ink);
+      renderer.drawLine(cx + (onRight ? 3 : -3) * scale, wolfY + 12 * scale, targetX, basketY, ink);
+    }
+  }
+  char text[48];
+  snprintf(text, sizeof(text), "Basket: %s", BASKET_NAMES[eggs.basketLane()]);
+  centered(82, text, THEME.smallFontId);
+}
+
 void renderBoard() {
   char text[64];
-  const uint32_t score = game == Game::Tiles ? tiles.score() : game == Game::Snake ? snake.score() : blocks.score();
+  const uint32_t score = game == Game::Tiles    ? tiles.score()
+                         : game == Game::Snake  ? snake.score()
+                         : game == Game::Blocks ? blocks.score()
+                                                : eggs.score();
   if (game == Game::Blocks) {
     snprintf(text, sizeof(text), "Score: %lu   Lines: %lu", static_cast<unsigned long>(score),
              static_cast<unsigned long>(blocks.lines()));
+  } else if (game == Game::Eggs) {
+    snprintf(text, sizeof(text), "Score: %lu   Misses: %u/%d", static_cast<unsigned long>(score),
+             static_cast<unsigned>(eggs.misses()), games::EggCatcher::MAX_MISSES);
   } else {
     snprintf(text, sizeof(text), "Score: %lu", static_cast<unsigned long>(score));
   }
   centered(52, text);
   const bool ink = THEME.primaryTextBlack;
-  if (game == Game::Tiles) {
+  if (game == Game::Eggs) {
+    renderEggs();
+  } else if (game == Game::Tiles) {
     const auto b = boardLayout(4, 4);
     for (int row = 0; row < 4; ++row) {
       for (int col = 0; col < 4; ++col) {
@@ -242,16 +339,21 @@ void renderBoard() {
                         : ended()                            ? "Game over - Menu to restart"
                         : game == Game::Tiles && tiles.won() ? "2048 reached! Keep playing"
                         : game == Game::Blocks               ? "Up: rotate   Down: lower"
+                        : game == Game::Eggs
+                            ? (manual ? "Basket tap = one step" : "Catch eggs - three misses end the game")
                         : game == Game::Snake ? (manual ? "Direction = one step" : "Slow pace - Menu to pause")
                                               : "Merge tiles to reach 2048";
   centered(h - 162, message, THEME.smallFontId);
-  centered(h - 140, "Tap top/bottom/left/right edges", THEME.smallFontId);
+  centered(h - 140, game == Game::Eggs ? "Tap a chute or use the screen edges" : "Tap top/bottom/left/right edges",
+           THEME.smallFontId);
   constexpr const char* controls[] = {"Up", "Down", "Left", "Right"};
   for (int i = 0; i < 4; ++i) {
+    const char* label = game == Game::Eggs ? BASKET_NAMES[i] : controls[i];
+    const int font = game == Game::Eggs ? THEME.smallFontId : THEME.uiFontId;
     const int x = i * w / 4, y = h - FOOTER_HEIGHT - CONTROL_HEIGHT;
     renderer.drawRect(x + 3, y + 4, w / 4 - 6, CONTROL_HEIGHT - 8, ink);
-    renderer.drawText(THEME.uiFontId, x + (w / 4 - renderer.getTextWidth(THEME.uiFontId, controls[i])) / 2,
-                      y + (CONTROL_HEIGHT - renderer.getLineHeight(THEME.uiFontId)) / 2, controls[i], ink);
+    renderer.drawText(font, x + (w / 4 - renderer.getTextWidth(font, label)) / 2,
+                      y + (CONTROL_HEIGHT - renderer.getLineHeight(font)) / 2, label, ink);
   }
   ui::buttonBar(renderer, THEME, ui::ButtonBar("Games", "Menu", "<", ">"));
 }
@@ -287,14 +389,23 @@ bool handleEvent(Core& core, const Event& event) {
         p, {0, static_cast<int16_t>(h - FOOTER_HEIGHT - CONTROL_HEIGHT), static_cast<int16_t>(w), CONTROL_HEIGHT}, 4,
         1);
     if (index >= 0) {
-      constexpr Button buttons[] = {Button::Up, Button::Down, Button::Left, Button::Right};
-      button(buttons[index]);
+      if (game == Game::Eggs) {
+        selectBasket(index);
+      } else {
+        constexpr Button buttons[] = {Button::Up, Button::Down, Button::Left, Button::Right};
+        button(buttons[index]);
+      }
     } else {
       const Button direction = touchMarginDirection(p, w, h);
-      if (direction != Button::Count) button(direction);
+      if (direction != Button::Count) {
+        button(direction);
+      } else if (game == Game::Eggs) {
+        const int quadrant = ui::touch::gridIndexAt(p, eggPlayArea(), 2, 2);
+        if (quadrant >= 0) selectBasket((quadrant % 2) * 2 + quadrant / 2);
+      }
     }
   } else {
-    const int count = screen == Screen::Chooser || game == Game::Tiles ? 3 : 4;
+    const int count = screen == Screen::Chooser ? GAME_COUNT : game == Game::Tiles ? 3 : 4;
     const int row = ui::touch::rowAt(p, {0, LIST_Y, static_cast<int16_t>(w), static_cast<int16_t>(count * ROW_HEIGHT)},
                                      ROW_HEIGHT, count);
     if (row >= 0) {
@@ -313,10 +424,10 @@ bool handleEvent(Core& core, const Event& event) {
 bool update(Core&) {
   if (screen == Screen::Playing && game != Game::Tiles && !manual && !ended()) {
     const uint32_t now = millis();
-    const uint32_t interval = game == Game::Snake ? 900 : 1500;
+    const uint32_t interval = game == Game::Snake ? 900 : game == Game::Eggs ? eggs.stepIntervalMs() : 1500;
     if (now - lastStep >= interval) {
       lastStep = now;
-      dirty |= game == Game::Snake ? snake.step() : blocks.step();
+      dirty |= game == Game::Snake ? snake.step() : game == Game::Eggs ? eggs.step() : blocks.step();
     }
   }
   const bool changed = dirty;
@@ -325,6 +436,7 @@ bool update(Core&) {
 }
 
 bool render(Core&) {
+  const uint32_t renderStarted = millis();
   renderer.clearScreen(THEME.backgroundColor);
   ui::title(renderer, THEME, THEME.screenMarginTop, screen == Screen::Chooser ? "Games" : NAMES[selected]);
   if (screen == Screen::Playing) {
@@ -336,7 +448,7 @@ bool render(Core&) {
                           : manual            ? "Pace: Turn-based"
                                               : "Pace: Slow",
                           "Choose game"};
-    const int count = screen == Screen::Chooser || game == Game::Tiles ? 3 : 4;
+    const int count = screen == Screen::Chooser ? GAME_COUNT : game == Game::Tiles ? 3 : 4;
     for (int i = 0; i < count; ++i) {
       ui::menuItem(renderer, THEME, LIST_Y + i * ROW_HEIGHT, screen == Screen::Chooser ? NAMES[i] : menu[i],
                    i == (screen == Screen::Chooser ? selected : pauseSelected));
@@ -350,8 +462,12 @@ bool render(Core&) {
   renderer.displayBuffer(fullRefresh ? hal::Display::FULL_REFRESH : hal::Display::FAST_REFRESH, true);
   if (fullRefresh) refreshCount = 0;
   fullRefresh = false;
-  // Begin the next interval after the panel finishes; never catch up missed ticks.
-  lastStep = millis();
+  // Pause the egg timer only for panel work; moving the basket must not reset it.
+  // The other games begin each interval after rendering, as before.
+  if (game == Game::Eggs && screen == Screen::Playing)
+    lastStep += millis() - renderStarted;
+  else
+    lastStep = millis();
   return true;
 }
 

@@ -18,11 +18,28 @@ class GfxRenderer {
     EpdFontFamily::Style style;
   };
 
+  struct TextCall {
+    int fontId;
+    int x;
+    int y;
+    std::string text;
+    bool black;
+    EpdFontFamily::Style style;
+  };
+
   struct RectCall {
     int x;
     int y;
     int w;
     int h;
+    bool color;
+  };
+
+  struct LineCall {
+    int x0;
+    int y0;
+    int x1;
+    int y1;
     bool color;
   };
 
@@ -46,13 +63,27 @@ class GfxRenderer {
 
   const std::vector<CenteredTextCall>& centeredTextCalls() const { return centeredTextCalls_; }
   void clearCenteredTextCalls() const { centeredTextCalls_.clear(); }
+  const std::vector<TextCall>& textCalls() const { return textCalls_; }
+  void clearTextCalls() const {
+    textCalls_.clear();
+    lastText_.clear();
+  }
   const std::vector<RectCall>& drawRects() const { return drawRects_; }
   const std::vector<RectCall>& fillRects() const { return fillRects_; }
+  const std::vector<LineCall>& lineCalls() const { return lineCalls_; }
+  uint8_t clearColor() const { return clearColor_; }
   void clearDrawRects() const { drawRects_.clear(); }
   void clearFillRects() const { fillRects_.clear(); }
+  void clearLineCalls() const { lineCalls_.clear(); }
   void clearRects() const {
     drawRects_.clear();
     fillRects_.clear();
+  }
+  void clearCalls() const {
+    clearCenteredTextCalls();
+    clearTextCalls();
+    clearRects();
+    clearLineCalls();
   }
   const std::string& lastText() const { return lastText_; }
 
@@ -65,13 +96,20 @@ class GfxRenderer {
   }
 
   std::string truncatedText(int, const char* text, int) const { return text ? text : ""; }
-  void clearScreen(uint8_t color = 0xFF) const { display_.clearScreen(color); }
+  void clearScreen(uint8_t color = 0xFF) const {
+    clearColor_ = color;
+    display_.clearScreen(color);
+  }
   void clearArea(int, int, int, int, uint8_t = 0xFF) const {}
-  void drawLine(int, int, int, int, bool = true) const {}
+  void drawLine(int x0, int y0, int x1, int y1, bool color = true) const {
+    lineCalls_.push_back({x0, y0, x1, y1, color});
+  }
   void drawRect(int x, int y, int w, int h, bool color = true) const { drawRects_.push_back({x, y, w, h, color}); }
   void fillRect(int x, int y, int w, int h, bool color = true) const { fillRects_.push_back({x, y, w, h, color}); }
-  void drawText(int, int, int, const char* text, bool = true, EpdFontFamily::Style = EpdFontFamily::REGULAR) const {
+  void drawText(int fontId, int x, int y, const char* text, bool black = true,
+                EpdFontFamily::Style style = EpdFontFamily::REGULAR) const {
     lastText_ = text ? text : "";
+    textCalls_.push_back({fontId, x, y, lastText_, black, style});
   }
   void drawCenteredText(int fontId, int y, const char* text, bool black = true,
                         EpdFontFamily::Style style = EpdFontFamily::REGULAR) const {
@@ -85,8 +123,11 @@ class GfxRenderer {
   int screenWidth_ = 480;
   int screenHeight_ = 800;
   mutable std::vector<CenteredTextCall> centeredTextCalls_;
+  mutable std::vector<TextCall> textCalls_;
   mutable std::vector<RectCall> drawRects_;
   mutable std::vector<RectCall> fillRects_;
+  mutable std::vector<LineCall> lineCalls_;
   mutable std::string lastText_;
+  mutable uint8_t clearColor_ = 0xFF;
   std::vector<std::string> wrappedTextResult_;
 };

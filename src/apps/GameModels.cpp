@@ -408,4 +408,82 @@ bool FallingBlocks::occupied(int x, int y) const {
   return false;
 }
 
+void EggCatcher::reset(uint32_t seed) {
+  rng_ = seed == 0 ? 1 : seed;
+  clearEggs();
+  score_ = 0;
+  misses_ = 0;
+  basketLane_ = 0;
+  stepsSinceSpawn_ = 0;
+  gameOver_ = false;
+  spawnEgg();
+}
+
+uint32_t EggCatcher::nextRandom() { return xorshift(rng_); }
+
+void EggCatcher::clearEggs() {
+  for (auto& lane : eggs_) {
+    for (bool& cell : lane) {
+      cell = false;
+    }
+  }
+}
+
+void EggCatcher::spawnEgg() {
+  eggs_[nextRandom() % LANES][0] = true;
+  stepsSinceSpawn_ = 0;
+}
+
+bool EggCatcher::selectLane(int lane) {
+  if (gameOver_ || lane < 0 || lane >= LANES) return false;
+  if (basketLane_ == static_cast<uint8_t>(lane)) return false;
+  basketLane_ = static_cast<uint8_t>(lane);
+  return true;
+}
+
+bool EggCatcher::step() {
+  if (gameOver_) return false;
+
+  bool changed = false;
+  for (int lane = 0; lane < LANES; lane++) {
+    if (!eggs_[lane][POSITIONS - 1]) continue;
+    eggs_[lane][POSITIONS - 1] = false;
+    if (lane == basketLane_) {
+      score_++;
+    } else {
+      misses_++;
+      if (misses_ >= MAX_MISSES) gameOver_ = true;
+    }
+    changed = true;
+  }
+  if (gameOver_) return changed;
+
+  for (int lane = 0; lane < LANES; lane++) {
+    for (int position = POSITIONS - 1; position > 0; position--) {
+      if (eggs_[lane][position - 1] != eggs_[lane][position]) changed = true;
+      eggs_[lane][position] = eggs_[lane][position - 1];
+    }
+    if (eggs_[lane][0]) changed = true;
+    eggs_[lane][0] = false;
+  }
+
+  if (stepsSinceSpawn_ < 255) stepsSinceSpawn_++;
+  if (stepsSinceSpawn_ >= 2) {
+    spawnEgg();
+    changed = true;
+  }
+  return changed;
+}
+
+bool EggCatcher::egg(int lane, int position) const {
+  if (lane < 0 || lane >= LANES || position < 0 || position >= POSITIONS) return false;
+  return eggs_[lane][position];
+}
+
+uint32_t EggCatcher::stepIntervalMs() const {
+  const uint32_t reduction = score_ > 22 ? 450 : score_ * 20;
+  const uint32_t interval = 1100 - reduction;
+  return interval < 650 ? 650 : interval;
+}
+
 }  // namespace papyrix::games
