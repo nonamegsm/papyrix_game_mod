@@ -17,6 +17,18 @@ and game-interface checks plus 56 existing navigation/input checks.
 
 The project retains the upstream MIT license and documentation below.
 
+## Photos on X4 Pro
+
+Photos of the mod running on an Xteink X4 Pro, with the surrounding background removed.
+
+| Apps menu | Games chooser |
+| :---: | :---: |
+| <img src="docs/images/game-mod/apps-menu.png" width="260" alt="X4 Pro Apps menu with the Games entry"> | <img src="docs/images/game-mod/games-menu.png" width="260" alt="X4 Pro game chooser listing 2048, Snake, and Falling Blocks"> |
+
+| 2048 | Falling Blocks |
+| :---: | :---: |
+| <img src="docs/images/game-mod/2048.png" width="260" alt="2048 running on the X4 Pro with touch direction controls"> | <img src="docs/images/game-mod/falling-blocks.png" width="260" alt="Falling Blocks running on the X4 Pro with touch direction controls"> |
+
 [![Changelog](https://img.shields.io/badge/changelog-CHANGELOG.md-blue)](CHANGELOG.md)
 [![User Guide](https://img.shields.io/badge/docs-User_Guide-green)](docs/user_guide.md)
 [![Customization](https://img.shields.io/badge/docs-Customization-green)](docs/customization.md)
