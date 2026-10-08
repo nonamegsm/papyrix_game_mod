@@ -1,9 +1,11 @@
+#include "BarcodeApp.h"
 #include "ClockApp.h"
 #include "GamesApp.h"
 #include "ImageViewerApp.h"
 #include "LocalsendApp.h"
 #include "MiniApp.h"
 #include "PrinterApp.h"
+#include "QrCodeApp.h"
 
 namespace papyrix {
 
@@ -18,6 +20,10 @@ const MiniApp APPS[] = {
      clock_app::onMenuButton},
     {"Games", games_app::enter, games_app::update, nullptr, games_app::render, games_app::exit, nullptr, nullptr,
      games_app::handleEvent},
+    {"Barcode", barcode_app::enter, barcode_app::update, nullptr, barcode_app::render, barcode_app::exit, nullptr,
+     nullptr, barcode_app::handleEvent},
+    {"QR Codes", qr_app::enter, qr_app::update, nullptr, qr_app::render, qr_app::exit, nullptr, nullptr,
+     qr_app::handleEvent},
 };
 const uint8_t APP_COUNT = sizeof(APPS) / sizeof(APPS[0]);
 const int8_t APP_IMAGEVIEWER = 0;
@@ -25,5 +31,7 @@ const int8_t APP_PRINTER = 1;
 const int8_t APP_LOCALSEND = 2;
 const int8_t APP_CLOCK = 3;
 const int8_t APP_GAMES = 4;
+const int8_t APP_BARCODE = 5;
+const int8_t APP_QRCODE = 6;
 
 }  // namespace papyrix

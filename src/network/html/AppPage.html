@@ -12,7 +12,7 @@
     header{background:#1f2937;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #374151}
     header h1{font-size:1.2em;color:#f9fafb;font-weight:600}
     header .ver{font-size:.8em;color:#6b7280;margin-left:8px}
-    nav{display:flex;background:#1f2937;border-bottom:1px solid #374151;padding:0 12px}
+    nav{display:flex;flex-wrap:wrap;overflow-x:auto;background:#1f2937;border-bottom:1px solid #374151;padding:0 12px}
     nav button{background:none;border:none;color:#9ca3af;padding:12px 18px;cursor:pointer;font-size:.95em;font-weight:500;border-bottom:2px solid transparent;transition:all .15s}
     nav button:hover{color:#e5e7eb}
     nav button.active{color:#a78bfa;border-bottom-color:#8b5cf6}
@@ -77,6 +77,21 @@
     .progress-text{text-align:center;font-size:.8em;color:#9ca3af;margin-top:4px}
     .warn-text{color:#f87171;font-weight:600;margin:8px 0}
     .item-name{color:#f3f4f6;font-weight:600;word-break:break-all;margin:8px 0 14px}
+    .form-grid{display:grid;gap:12px;padding:16px}
+    .form-grid label{display:block;color:#9ca3af;font-size:.85em;margin-bottom:6px}
+    .form-grid input,.form-grid textarea{width:100%;padding:9px 12px;background:#111827;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font:inherit;font-size:.9em}
+    .form-grid textarea{min-height:130px;resize:vertical;line-height:1.35}
+    .form-grid input:focus,.form-grid textarea:focus{outline:none;border-color:#8b5cf6}
+    .form-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .field-meta{display:flex;justify-content:space-between;gap:10px;color:#6b7280;font-size:.78em;margin-top:4px}
+    .field-error{color:#f87171;font-size:.82em;min-height:1.2em;margin-top:4px}
+    .status-line{color:#9ca3af;font-size:.86em;line-height:1.4;min-height:1.4em}
+    .qr-list{display:grid;gap:10px;padding:16px;border-top:1px solid #374151}
+    .qr-item{background:#111827;border:1px solid #374151;border-radius:8px;padding:12px;display:grid;gap:8px}
+    .qr-item-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    .qr-item-name{color:#f3f4f6;font-weight:600;word-break:break-word}
+    .qr-item-data{color:#9ca3af;font-size:.85em;white-space:pre-wrap;word-break:break-word;max-height:6.5em;overflow:hidden}
+    .qr-item-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
     footer{text-align:center;padding:16px;color:#4b5563;font-size:.8em;margin-top:auto}
     footer a{color:#6b7280}
     @media(max-width:600px){
@@ -88,6 +103,10 @@
       .modal{padding:16px}
       header{padding:10px 14px}
       header h1{font-size:1.05em}
+      nav{padding:0 8px}
+      .form-grid,.qr-list{padding:12px}
+      .qr-item-head{display:block}
+      .qr-item-actions{justify-content:flex-start;margin-top:8px}
     }
   </style>
 </head>
@@ -104,6 +123,7 @@
   <button data-tab="themes">Themes</button>
   <button data-tab="locale">Locale</button>
   <button data-tab="firmware">Firmware</button>
+  <button data-tab="qrcodes">QR Codes</button>
 </nav>
 
 <div class="container">
@@ -173,6 +193,36 @@
       </div>
     </div>
     <div class="card"><div id="firmware-card" style="padding:20px"><div class="loader-wrap"><div class="loader"></div></div></div></div>
+  </div>
+
+  <!-- QR Codes Panel -->
+  <div class="panel" id="panel-qrcodes">
+    <div class="toolbar">
+      <div class="toolbar-left"><span class="info-text">Codes are saved on the SD card. After leaving WiFi Transfer, open Apps &gt; QR Codes.</span></div>
+    </div>
+    <div class="card">
+      <form class="form-grid" id="qr-form">
+        <input type="hidden" id="qr-id">
+        <div>
+          <label for="qr-name">Name</label>
+          <input type="text" id="qr-name" autocomplete="off" aria-describedby="qr-name-meta qr-name-error">
+          <div class="field-meta" id="qr-name-meta"><span>Label shown on the device</span><span id="qr-name-count">0/48 bytes</span></div>
+          <div class="field-error" id="qr-name-error" aria-live="polite"></div>
+        </div>
+        <div>
+          <label for="qr-data">QR payload</label>
+          <textarea id="qr-data" aria-describedby="qr-data-meta qr-data-error"></textarea>
+          <div class="field-meta" id="qr-data-meta"><span>Text, URL, Wi-Fi, or any QR content</span><span id="qr-data-count">0/512 bytes</span></div>
+          <div class="field-error" id="qr-data-error" aria-live="polite"></div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-accent" id="qr-save-btn" type="submit" disabled>Save Code</button>
+          <button class="btn btn-cancel" id="qr-cancel-btn" type="button" onclick="resetQRCodeForm()" style="display:none">Cancel Edit</button>
+        </div>
+        <div class="status-line" id="qr-status" aria-live="polite"></div>
+      </form>
+      <div class="qr-list" id="qr-list"><div class="loader-wrap"><div class="loader"></div></div></div>
+    </div>
   </div>
 </div>
 
@@ -312,7 +362,7 @@ function switchTab(tab){
   fontsPath='/config/fonts';
   document.querySelectorAll('#tabs button').forEach(function(b){b.classList.toggle('active',b.dataset.tab===tab)});
   document.querySelectorAll('.panel').forEach(function(p){p.classList.toggle('active',p.id==='panel-'+tab)});
-  if(tab==='locale'){loadLocale()}else if(tab==='firmware'){loadFirmware()}else{loadTabData(tab)}
+  if(tab==='locale'){loadLocale()}else if(tab==='firmware'){loadFirmware()}else if(tab==='qrcodes'){loadQRCodes()}else{loadTabData(tab)}
 }
 
 // --- Data Loading ---
@@ -749,6 +799,189 @@ function doFirmwareUpload(){
 function doFirmwareDelete(){
   if(!confirm('Delete firmware.bin from SD card?'))return;
   fetch('/api/firmware-delete',{method:'POST'}).then(function(r){if(r.ok){loadFirmware()}else{r.text().then(function(t){alert('Error: '+t)})}}).catch(function(err){alert('Error: '+err)});
+}
+
+// --- QR Codes ---
+var qrCodes=[];
+var qrLimits={maxCodes:16,maxNameBytes:48,maxDataBytes:512};
+var qrBusy=false;
+
+function qrBytes(s){return new TextEncoder().encode(s).length}
+function qrSetText(id,text){document.getElementById(id).textContent=text}
+function qrSetStatus(text,isError){
+  var el=document.getElementById('qr-status');
+  el.textContent=text||'';
+  el.style.color=isError?'#f87171':'#9ca3af';
+}
+
+function setQRCodeBusy(busy){
+  qrBusy=busy;
+  updateQRCodeValidation();
+  document.getElementById('qr-cancel-btn').disabled=busy;
+  document.querySelectorAll('#qr-list button').forEach(function(btn){btn.disabled=busy});
+}
+
+function qrErrorFromStatus(status){
+  if(status===400)return'Check the name and payload limits.';
+  if(status===404)return'That code was not found. Reloading the list.';
+  if(status===409)return'The QR code list is full.';
+  if(status===500)return'Storage error. Check the SD card and try again.';
+  return'Request failed. Try again.';
+}
+
+function updateQRCodeValidation(){
+  var name=document.getElementById('qr-name').value;
+  var data=document.getElementById('qr-data').value;
+  var nameBytes=qrBytes(name);
+  var dataBytes=qrBytes(data);
+  var editing=!!document.getElementById('qr-id').value;
+  var full=!editing&&qrCodes.length>=qrLimits.maxCodes;
+  var nameError='';
+  var dataError='';
+
+  qrSetText('qr-name-count',nameBytes+'/'+qrLimits.maxNameBytes+' bytes');
+  qrSetText('qr-data-count',dataBytes+'/'+qrLimits.maxDataBytes+' bytes');
+  if(!nameBytes)nameError='Enter a name.';
+  else if(nameBytes>qrLimits.maxNameBytes)nameError='Name is too long.';
+  if(!dataBytes)dataError='Enter QR payload text.';
+  else if(dataBytes>qrLimits.maxDataBytes)dataError='Payload is too long.';
+  qrSetText('qr-name-error',nameError);
+  qrSetText('qr-data-error',dataError);
+
+  document.getElementById('qr-save-btn').disabled=qrBusy||full||!!nameError||!!dataError;
+  document.getElementById('qr-save-btn').textContent=editing?'Save Changes':'Save Code';
+  if(full&&!qrBusy)qrSetStatus('The QR code list is full. Edit or delete a code to add another.',true);
+}
+
+function resetQRCodeForm(){
+  document.getElementById('qr-id').value='';
+  document.getElementById('qr-name').value='';
+  document.getElementById('qr-data').value='';
+  document.getElementById('qr-cancel-btn').style.display='none';
+  qrSetStatus('',false);
+  updateQRCodeValidation();
+}
+
+function loadQRCodes(){
+  var el=document.getElementById('qr-list');
+  el.textContent='';
+  var lw=document.createElement('div');lw.className='loader-wrap';
+  var ld=document.createElement('div');ld.className='loader';
+  lw.appendChild(ld);el.appendChild(lw);
+  setQRCodeBusy(true);
+  fetch('/api/qrcodes').then(function(r){
+    if(!r.ok)throw new Error(r.status);
+    return r.json();
+  }).then(function(d){
+    qrCodes=Array.isArray(d.codes)?d.codes:[];
+    qrLimits.maxCodes=d.maxCodes||16;
+    qrLimits.maxNameBytes=d.maxNameBytes||48;
+    qrLimits.maxDataBytes=d.maxDataBytes||512;
+    renderQRCodes();
+    qrSetStatus(qrCodes.length+'/'+qrLimits.maxCodes+' saved codes.',false);
+    setQRCodeBusy(false);
+  }).catch(function(){
+    qrCodes=[];
+    el.textContent='';
+    var em=document.createElement('div');em.className='empty';em.textContent='Failed to load QR codes';
+    el.appendChild(em);
+    qrSetStatus('Failed to load QR codes. Check WiFi Transfer and try again.',true);
+    setQRCodeBusy(false);
+  });
+}
+
+function renderQRCodes(){
+  var el=document.getElementById('qr-list');
+  el.textContent='';
+  if(!qrCodes.length){
+    var em=document.createElement('div');em.className='empty';em.textContent='No saved QR codes';
+    el.appendChild(em);
+    updateQRCodeValidation();
+    return;
+  }
+  qrCodes.forEach(function(code){
+    var item=document.createElement('div');item.className='qr-item';
+    var head=document.createElement('div');head.className='qr-item-head';
+    var name=document.createElement('div');name.className='qr-item-name';name.textContent=code.name||'Untitled';
+    var actions=document.createElement('div');actions.className='qr-item-actions';
+    var edit=document.createElement('button');edit.className='btn btn-accent';edit.type='button';edit.textContent='Edit';edit.setAttribute('aria-label','Edit QR code '+(code.name||'Untitled'));
+    edit.addEventListener('click',function(){editQRCode(code)});
+    var del=document.createElement('button');del.className='btn btn-danger';del.type='button';del.textContent='Delete';del.setAttribute('aria-label','Delete QR code '+(code.name||'Untitled'));
+    del.addEventListener('click',function(){deleteQRCode(code)});
+    actions.appendChild(edit);actions.appendChild(del);
+    head.appendChild(name);head.appendChild(actions);
+    var data=document.createElement('div');data.className='qr-item-data';data.textContent=code.data||'';
+    item.appendChild(head);item.appendChild(data);el.appendChild(item);
+  });
+  updateQRCodeValidation();
+}
+
+function editQRCode(code){
+  document.getElementById('qr-id').value=code.id;
+  document.getElementById('qr-name').value=code.name||'';
+  document.getElementById('qr-data').value=code.data||'';
+  document.getElementById('qr-cancel-btn').style.display='flex';
+  qrSetStatus('Editing '+(code.name||'Untitled')+'.',false);
+  updateQRCodeValidation();
+  document.getElementById('qr-name').focus();
+}
+
+document.getElementById('qr-name').addEventListener('input',updateQRCodeValidation);
+document.getElementById('qr-data').addEventListener('input',updateQRCodeValidation);
+document.getElementById('qr-form').addEventListener('submit',function(e){
+  e.preventDefault();
+  saveQRCode();
+});
+
+function saveQRCode(){
+  updateQRCodeValidation();
+  var btn=document.getElementById('qr-save-btn');
+  if(btn.disabled)return;
+  var id=document.getElementById('qr-id').value;
+  var body={
+    name:document.getElementById('qr-name').value,
+    data:document.getElementById('qr-data').value
+  };
+  if(id)body.id=Number(id);
+  setQRCodeBusy(true);
+  qrSetStatus(id?'Saving changes...':'Saving code...',false);
+  fetch('/api/qrcodes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){
+    if(!r.ok)throw new Error(r.status);
+    return r.json();
+  }).then(function(saved){
+    var found=false;
+    qrCodes=qrCodes.map(function(code){
+      if(String(code.id)===String(saved.id)){found=true;return saved}
+      return code;
+    });
+    if(!found)qrCodes.push(saved);
+    resetQRCodeForm();
+    renderQRCodes();
+    qrSetStatus('Saved. '+qrCodes.length+'/'+qrLimits.maxCodes+' saved codes.',false);
+    setQRCodeBusy(false);
+  }).catch(function(err){
+    qrSetStatus(qrErrorFromStatus(Number(err.message)),true);
+    if(Number(err.message)===404)loadQRCodes();
+    else setQRCodeBusy(false);
+  });
+}
+
+function deleteQRCode(code){
+  if(!confirm('Delete this QR code?'))return;
+  setQRCodeBusy(true);
+  qrSetStatus('Deleting code...',false);
+  fetch('/api/qrcodes?id='+encodeURIComponent(code.id),{method:'DELETE'}).then(function(r){
+    if(!r.ok)throw new Error(r.status);
+    qrCodes=qrCodes.filter(function(item){return String(item.id)!==String(code.id)});
+    if(String(document.getElementById('qr-id').value)===String(code.id))resetQRCodeForm();
+    renderQRCodes();
+    qrSetStatus('Deleted. '+qrCodes.length+'/'+qrLimits.maxCodes+' saved codes.',false);
+    setQRCodeBusy(false);
+  }).catch(function(err){
+    qrSetStatus(qrErrorFromStatus(Number(err.message)),true);
+    if(Number(err.message)===404)loadQRCodes();
+    else setQRCodeBusy(false);
+  });
 }
 
 // --- Init ---

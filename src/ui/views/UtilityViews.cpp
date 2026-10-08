@@ -73,6 +73,11 @@ void render(const GfxRenderer& r, const Theme& t, const KeyboardView& v) {
     r.drawText(t.uiFontId, inputX + 8, inputY + 10, "_", t.secondaryTextBlack);
   }
 
+  if (v.statusText && v.statusText[0]) {
+    const auto status = r.truncatedText(t.smallFontId, v.statusText, inputW);
+    r.drawText(t.smallFontId, inputX, 94, status.c_str(), t.primaryTextBlack);
+  }
+
   // Keyboard below input
   const int keyboardY = KeyboardView::KEYBOARD_Y;
   keyboard(r, t, keyboardY, v.keyboard);

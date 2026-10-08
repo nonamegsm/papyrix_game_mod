@@ -112,6 +112,7 @@ struct KeyboardView {
   uint8_t inputLen = 0;
   KeyboardState keyboard;
   bool isPassword = false;
+  const char* statusText = nullptr;
   bool needsRender = true;
 
   void setTitle(const char* t) {

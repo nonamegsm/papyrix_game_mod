@@ -5,6 +5,10 @@ based on PapyriX **v1.31.0**, adds offline **2048**, **Snake**, and **Falling Bl
 to **Apps > Games**. It includes pause/restart controls, slow and turn-based play,
 physical-button controls, and touch controls for the X4 Pro.
 
+The mod also includes a **Barcode** app with on-screen entry for **Code 128**
+and **EAN-13**, plus a **QR Codes** app that displays named codes saved through
+the bundled web interface. See the [barcode and QR guide](docs/barcode-qr.md).
+
 The primary device for this mod is the **Xteink X4 Pro (ESP32-S3)**. Build its
 firmware with `pio run -e release_x4pro`; the image is
 `.pio/build/release_x4pro/firmware.bin`. For X3/X4 (ESP32-C3), use
@@ -16,6 +20,20 @@ Both firmware targets compiled successfully. Validation includes 102 game-model
 and game-interface checks plus 56 existing navigation/input checks.
 
 The project retains the upstream MIT license and documentation below.
+
+## Barcode and QR screen previews
+
+These previews come from the app's rendering calls with demo data. Font
+appearance is illustrative; these are not photographs of the physical reader.
+The Code 128, EAN-13, and QR symbols shown here were decoded independently.
+
+| Code 128 | EAN-13 |
+| :---: | :---: |
+| <img src="docs/images/codes-preview/barcode-code128-display.png" width="240" alt="Code 128 screen preview encoding AB"> | <img src="docs/images/codes-preview/barcode-ean13-display.png" width="240" alt="EAN-13 screen preview encoding 4006381333931"> |
+
+| QR code | On-screen keyboard |
+| :---: | :---: |
+| <img src="docs/images/codes-preview/qr-display-demo-url.png" width="240" alt="QR Codes screen preview encoding this repository URL"> | <img src="docs/images/codes-preview/barcode-keyboard-code128.png" width="240" alt="On-screen keyboard preview for entering barcode data"> |
 
 ## Photos on X4 Pro
 
@@ -112,6 +130,11 @@ devices does not reuse incompatible rendered pages.
 
 ### Games
 - [x] Offline games: 2048, Snake, and Falling Blocks, with button and X4 Pro touch controls ([controls](docs/games.md))
+
+### Barcode and QR Codes
+- [x] Code 128 and EAN-13 entry through the on-screen keyboard
+- [x] QR code creation, editing, and deletion from the bundled web interface
+- [x] Saved codes available offline from the Apps menu ([guide](docs/barcode-qr.md))
 
 ### Customization
 - [x] Custom themes from the SD card (`/config/themes/`)

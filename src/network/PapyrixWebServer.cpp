@@ -9,7 +9,11 @@
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 
+#include <cstdio>
+#include <cstring>
+
 #include "../IniParser.h"
+#include "../apps/QrCodeStore.h"
 #include "../config.h"
 #include "../content/RecentBooksStore.h"
 #include "../ui/ImageFileView.h"
@@ -43,6 +47,86 @@ bool prepareWebPath(String& path) {
   if (!path.startsWith("/")) path = "/" + path;
   if (path.length() > 1 && path.endsWith("/")) path = path.substring(0, path.length() - 1);
   return web::isSafeWebPath(path.c_str(), path.length());
+}
+
+void sendJsonError(WebServer* server, int status, const char* message) {
+  JsonDocument doc;
+  doc["error"] = message;
+  char json[160];
+  serializeJson(doc, json, sizeof(json));
+  server->send(status, "application/json", json);
+}
+
+int statusForQrStoreResult(codes::StoreResult result) {
+  switch (result) {
+    case codes::StoreResult::InvalidName:
+    case codes::StoreResult::InvalidData:
+      return 400;
+    case codes::StoreResult::NotFound:
+      return 404;
+    case codes::StoreResult::Full:
+      return 409;
+    case codes::StoreResult::StorageError:
+      return 500;
+    case codes::StoreResult::Ok:
+      return 200;
+  }
+  return 500;
+}
+
+bool parseStrictQrId(const String& value, uint8_t& id) {
+  if (value.isEmpty() || value.length() > 2) return false;
+  int parsed = 0;
+  for (int i = 0; i < value.length(); ++i) {
+    const char c = value.charAt(i);
+    if (c < '0' || c > '9') return false;
+    parsed = parsed * 10 + (c - '0');
+  }
+  if (parsed < 0 || parsed >= static_cast<int>(codes::MAX_QR_CODES)) return false;
+  id = static_cast<uint8_t>(parsed);
+  return true;
+}
+
+bool isStrictQrPostSchema(JsonObjectConst object) {
+  if (object.isNull()) return false;
+
+  bool hasName = false;
+  bool hasData = false;
+  bool hasId = false;
+  for (JsonPairConst item : object) {
+    const char* key = item.key().c_str();
+    if (std::strcmp(key, "name") == 0) {
+      hasName = true;
+    } else if (std::strcmp(key, "data") == 0) {
+      hasData = true;
+    } else if (std::strcmp(key, "id") == 0) {
+      hasId = true;
+    } else {
+      return false;
+    }
+  }
+
+  if (!hasName || !hasData) return false;
+  if (!object["name"].is<JsonString>() || !object["data"].is<JsonString>()) return false;
+  if (hasId && !object["id"].is<int>()) return false;
+  return true;
+}
+
+bool containsNul(JsonString value) {
+  return value.c_str() && std::memchr(value.c_str(), '\0', value.size()) != nullptr;
+}
+
+void sendQrEntry(WebServer* server, int status, const codes::QrCodeEntry& entry) {
+  JsonDocument doc;
+  doc["id"] = entry.id;
+  doc["name"] = entry.name;
+  doc["data"] = entry.data;
+  char json[1792];
+  if (serializeJson(doc, json, sizeof(json)) >= sizeof(json)) {
+    sendJsonError(server, 500, "QR code response too large");
+    return;
+  }
+  server->send(status, "application/json", json);
 }
 
 }  // namespace
@@ -109,6 +193,9 @@ void PapyrixWebServer::begin() {
   server_->on("/api/firmware", HTTP_GET, [this] { handleFirmwareStatus(); });
   server_->on("/api/firmware", HTTP_POST, [this] { handleFirmwareUploadPost(); }, [this] { handleFirmwareUpload(); });
   server_->on("/api/firmware-delete", HTTP_POST, [this] { handleFirmwareDelete(); });
+  server_->on("/api/qrcodes", HTTP_GET, [this] { handleQrCodesList(); });
+  server_->on("/api/qrcodes", HTTP_POST, [this] { handleQrCodesSave(); });
+  server_->on("/api/qrcodes", HTTP_DELETE, [this] { handleQrCodesDelete(); });
   server_->onNotFound([this] { handleNotFound(); });
 
   server_->begin();
@@ -834,6 +921,125 @@ void PapyrixWebServer::handleFirmwareDelete() {
   } else {
     server_->send(500, "text/plain", "Failed to delete firmware file");
   }
+}
+
+void PapyrixWebServer::handleQrCodesList() {
+  codes::QrCodeStore store;
+  codes::QrCodeInfo infos[codes::MAX_QR_CODES] = {};
+  size_t count = 0;
+  const codes::StoreResult result = store.list(infos, codes::MAX_QR_CODES, count);
+  if (result != codes::StoreResult::Ok) {
+    sendJsonError(server_.get(), statusForQrStoreResult(result), codes::storeErrorMessage(result));
+    return;
+  }
+
+  server_->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server_->send(200, "application/json", "");
+  server_->sendContent("{\"codes\":[");
+
+  bool seenFirst = false;
+  for (size_t i = 0; i < count && i < codes::MAX_QR_CODES; ++i) {
+    codes::QrCodeEntry entry = {};
+    if (store.load(infos[i].id, entry) != codes::StoreResult::Ok) continue;
+
+    JsonDocument doc;
+    doc["id"] = entry.id;
+    doc["name"] = entry.name;
+    doc["data"] = entry.data;
+
+    char json[1792];
+    if (serializeJson(doc, json, sizeof(json)) >= sizeof(json)) continue;
+
+    if (seenFirst) {
+      server_->sendContent(",");
+    } else {
+      seenFirst = true;
+    }
+    server_->sendContent(json);
+  }
+
+  char suffix[96];
+  std::snprintf(suffix, sizeof(suffix), "],\"maxCodes\":%u,\"maxNameBytes\":%u,\"maxDataBytes\":%u}",
+                static_cast<unsigned>(codes::MAX_QR_CODES), static_cast<unsigned>(codes::MAX_QR_NAME_BYTES),
+                static_cast<unsigned>(codes::MAX_QR_DATA_BYTES));
+  server_->sendContent(suffix);
+  server_->sendContent("");
+}
+
+void PapyrixWebServer::handleQrCodesSave() {
+  String body = server_->arg("plain");
+  if (body.isEmpty() || body.length() > 4096) {
+    sendJsonError(server_.get(), 400, "Invalid QR code request body");
+    return;
+  }
+
+  JsonDocument doc;
+  if (deserializeJson(doc, body.c_str(), static_cast<size_t>(body.length())) != DeserializationError::Ok) {
+    sendJsonError(server_.get(), 400, "Invalid QR code JSON");
+    return;
+  }
+
+  JsonObjectConst object = doc.as<JsonObjectConst>();
+  if (!isStrictQrPostSchema(object)) {
+    sendJsonError(server_.get(), 400, "Invalid QR code schema");
+    return;
+  }
+
+  int id = -1;
+  const bool update = !object["id"].isNull();
+  if (update) {
+    id = object["id"].as<int>();
+    if (id < 0 || id >= static_cast<int>(codes::MAX_QR_CODES)) {
+      sendJsonError(server_.get(), 400, "Invalid QR code id");
+      return;
+    }
+  }
+
+  const JsonString name = object["name"].as<JsonString>();
+  const JsonString data = object["data"].as<JsonString>();
+  if (containsNul(name) || containsNul(data)) {
+    sendJsonError(server_.get(), 400, "Invalid QR code schema");
+    return;
+  }
+
+  codes::QrCodeStore store;
+  uint8_t savedId = 0;
+  const codes::StoreResult result = store.save(id, name.c_str(), data.c_str(), savedId);
+  if (result != codes::StoreResult::Ok) {
+    sendJsonError(server_.get(), statusForQrStoreResult(result), codes::storeErrorMessage(result));
+    return;
+  }
+
+  codes::QrCodeEntry entry = {};
+  const codes::StoreResult loadResult = store.load(savedId, entry);
+  if (loadResult != codes::StoreResult::Ok) {
+    sendJsonError(server_.get(), 500, codes::storeErrorMessage(loadResult));
+    return;
+  }
+
+  sendQrEntry(server_.get(), update ? 200 : 201, entry);
+}
+
+void PapyrixWebServer::handleQrCodesDelete() {
+  if (!server_->hasArg("id")) {
+    sendJsonError(server_.get(), 400, "Missing QR code id");
+    return;
+  }
+
+  uint8_t id = 0;
+  if (!parseStrictQrId(server_->arg("id"), id)) {
+    sendJsonError(server_.get(), 400, "Invalid QR code id");
+    return;
+  }
+
+  codes::QrCodeStore store;
+  const codes::StoreResult result = store.remove(id);
+  if (result != codes::StoreResult::Ok) {
+    sendJsonError(server_.get(), statusForQrStoreResult(result), codes::storeErrorMessage(result));
+    return;
+  }
+
+  server_->send(200, "application/json", "{\"ok\":true}");
 }
 
 }  // namespace papyrix

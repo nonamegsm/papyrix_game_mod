@@ -65,6 +65,11 @@ class PapyrixWebServer {
   void handleFirmwareUpload();
   void handleFirmwareUploadPost();
   void handleFirmwareDelete();
+
+  // QR code saved data API
+  void handleQrCodesList();
+  void handleQrCodesSave();
+  void handleQrCodesDelete();
 };
 
 }  // namespace papyrix

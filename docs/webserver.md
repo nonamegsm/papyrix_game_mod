@@ -107,7 +107,7 @@ After the connection, the screen shows:
 
 ## Step 5: Using the Web Interface
 
-The web interface uses a tab layout with six tabs: **Books**, **Sleep**, **Fonts**, **Themes**, **Locale**, and **Firmware**. The firmware version is shown in the top-right corner.
+The web interface uses a tab layout with seven tabs: **Books**, **Sleep**, **Fonts**, **Themes**, **Locale**, **Firmware**, and **QR Codes**. The firmware version is shown in the top-right corner.
 
 ![Books tab](images/web-books.png)
 
@@ -234,6 +234,14 @@ The Firmware tab manages firmware update files for the device.
 - A note tells you to run the update from **Settings > Firmware Update** on the device
 
 ---
+
+### QR Codes Tab
+
+Use the QR Codes tab to create, edit, and delete named QR payloads on the SD card.
+Enter a name and text or URL, then select **Save Code**. The form shows UTF-8 byte
+counters and validation errors. Up to 16 codes are supported, with 48-byte names
+and 512-byte payloads. After leaving WiFi Transfer, open **Apps > QR Codes** on
+the reader to display a saved code offline. See the [barcode and QR guide](barcode-qr.md).
 
 ## Troubleshooting
 

@@ -10,6 +10,13 @@ endif()
 # Get project root (parent of test directory)
 get_filename_component(PROJECT_ROOT ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
 
+# These are existing firmware dependencies. Code-app host tests reuse the
+# copies fetched by PlatformIO without adding a second library dependency.
+file(GLOB QR_CODE_DEP_DIRS "${PROJECT_ROOT}/.pio/libdeps/*/QRCode/src")
+file(GLOB ARDUINO_JSON_DEP_DIRS "${PROJECT_ROOT}/.pio/libdeps/*/ArduinoJson/src")
+find_path(PAPYRIX_QRCODE_INCLUDE_DIR qrcode.h HINTS ${QR_CODE_DEP_DIRS} NO_DEFAULT_PATH)
+find_path(PAPYRIX_ARDUINOJSON_INCLUDE_DIR ArduinoJson.h HINTS ${ARDUINO_JSON_DEP_DIRS} NO_DEFAULT_PATH)
+
 # MSVC: Enable UTF-8 source and execution character set
 if(MSVC)
   add_compile_options(/utf-8)
@@ -64,6 +71,17 @@ file(GLOB_RECURSE TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/unit/*.cpp)
 
 foreach(TEST_SRC ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${TEST_SRC} NAME_WE)
+
+  if((TEST_NAME STREQUAL "QrSymbolTest" OR TEST_NAME STREQUAL "CodeAppsTest")
+     AND NOT PAPYRIX_QRCODE_INCLUDE_DIR)
+    message(STATUS "Skipping ${TEST_NAME}: build firmware to fetch the existing QRCode library")
+    continue()
+  endif()
+  if((TEST_NAME STREQUAL "QrCodeStoreTest" OR TEST_NAME STREQUAL "CodeAppsTest")
+     AND NOT PAPYRIX_ARDUINOJSON_INCLUDE_DIR)
+    message(STATUS "Skipping ${TEST_NAME}: build firmware to fetch the existing ArduinoJson library")
+    continue()
+  endif()
 
   if(TEST_NAME STREQUAL "DigitalInputTest")
     add_executable(${TEST_NAME} ${TEST_SRC}
@@ -1275,6 +1293,71 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${TEST_HELPERS}
     )
     target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/Ipp/src)
+  elseif(TEST_NAME STREQUAL "BarcodeEncoderTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/BarcodeEncoder.cpp
+      ${TEST_HELPERS})
+  elseif(TEST_NAME STREQUAL "QrCodeStoreTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/QrCodeStore.cpp
+      ${PROJECT_ROOT}/src/network/WebFileNameValidation.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+      ${PROJECT_ROOT}/lib/ScriptDetector/src/ScriptDetector.cpp
+      ${TEST_HELPERS})
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/src/apps
+      ${PAPYRIX_ARDUINOJSON_INCLUDE_DIR}
+      ${PROJECT_ROOT}/.pio/libdeps/release_xteink_c3/ArduinoJson/src)
+  elseif(TEST_NAME STREQUAL "QrSymbolTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/QrSymbol.cpp
+      ${PAPYRIX_QRCODE_INCLUDE_DIR}/qrcode.c
+      ${TEST_HELPERS})
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PAPYRIX_QRCODE_INCLUDE_DIR})
+  elseif(TEST_NAME STREQUAL "CodeAppsTest")
+    add_executable(${TEST_NAME} ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/BarcodeApp.cpp
+      ${PROJECT_ROOT}/src/apps/BarcodeEncoder.cpp
+      ${PROJECT_ROOT}/src/apps/QrCodeApp.cpp
+      ${PROJECT_ROOT}/src/apps/QrCodeStore.cpp
+      ${PROJECT_ROOT}/src/apps/QrSymbol.cpp
+      ${PROJECT_ROOT}/src/network/WebFileNameValidation.cpp
+      ${PROJECT_ROOT}/lib/Utf8/src/Utf8.cpp
+      ${PROJECT_ROOT}/lib/ScriptDetector/src/ScriptDetector.cpp
+      ${PROJECT_ROOT}/src/ui/Elements.cpp
+      ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
+      ${PROJECT_ROOT}/src/ui/views/UtilityViews.cpp
+      ${PROJECT_ROOT}/lib/I18n/src/I18n.cpp
+      ${PAPYRIX_QRCODE_INCLUDE_DIR}/qrcode.c
+      ${TEST_HELPERS})
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/codes/mocks
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/games/mocks)
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/src/apps
+      ${PAPYRIX_ARDUINOJSON_INCLUDE_DIR}
+      ${PAPYRIX_QRCODE_INCLUDE_DIR}
+      ${PROJECT_ROOT}/lib/Epub/src
+      ${PROJECT_ROOT}/lib/expat/src
+      ${PROJECT_ROOT}/lib/Fb2/src
+      ${PROJECT_ROOT}/lib/Html/src
+      ${PROJECT_ROOT}/lib/I18n/src
+      ${PROJECT_ROOT}/lib/BatteryMonitor/include
+      ${PROJECT_ROOT}/lib/Xtc/src
+      ${PROJECT_ROOT}/lib/Xtc/src/Xtc)
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_X4PRO=1)
+    if(MSVC)
+      target_compile_options(${TEST_NAME} PRIVATE /Gy /Gw)
+      target_link_options(${TEST_NAME} PRIVATE /OPT:REF)
+    else()
+      target_compile_options(${TEST_NAME} PRIVATE -ffunction-sections -fdata-sections)
+      if(APPLE)
+        target_link_options(${TEST_NAME} PRIVATE -Wl,-dead_strip)
+      else()
+        target_link_options(${TEST_NAME} PRIVATE -Wl,--gc-sections)
+      endif()
+    endif()
   elseif(TEST_NAME STREQUAL "GamesAppTest")
     add_executable(${TEST_NAME}
       ${TEST_SRC}
