@@ -7,6 +7,7 @@
 namespace papyrix {
 
 struct Core;
+struct Event;
 
 struct MiniApp {
   const char* name;
@@ -17,6 +18,8 @@ struct MiniApp {
   void (*exit)(Core& core);
   void (*renderMenu)(Core& core);
   void (*onMenuButton)(Core& core, Button btn);
+  // Return true when an app consumes input before the launcher's default controls.
+  bool (*handleEvent)(Core& core, const Event& event) = nullptr;
 };
 
 // App registry - defined in AppRegistry.cpp
@@ -26,5 +29,6 @@ extern const int8_t APP_IMAGEVIEWER;
 extern const int8_t APP_CLOCK;
 extern const int8_t APP_PRINTER;
 extern const int8_t APP_LOCALSEND;
+extern const int8_t APP_GAMES;
 
 }  // namespace papyrix

@@ -76,6 +76,11 @@ StateTransition AppLauncherState::update(Core& core) {
       return StateTransition::to(StateId::Sleep);
     }
 
+    if (mode_ == Mode::App && activeApp_ >= 0 && APPS[activeApp_].handleEvent &&
+        APPS[activeApp_].handleEvent(core, e)) {
+      continue;
+    }
+
     if (e.type == EventType::Tap && mode_ == Mode::Menu) {
       const auto hit = menuView_.hitTest({e.touch.x, e.touch.y}, renderer_.getScreenWidth(),
                                          renderer_.getScreenHeight(), THEME.itemHeight + THEME.itemSpacing,

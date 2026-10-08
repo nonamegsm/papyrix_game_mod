@@ -1275,6 +1275,48 @@ foreach(TEST_SRC ${TEST_SOURCES})
       ${TEST_HELPERS}
     )
     target_include_directories(${TEST_NAME} PRIVATE ${PROJECT_ROOT}/lib/Ipp/src)
+  elseif(TEST_NAME STREQUAL "GamesAppTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/GamesApp.cpp
+      ${PROJECT_ROOT}/src/apps/GameModels.cpp
+      ${PROJECT_ROOT}/src/ui/Elements.cpp
+      ${PROJECT_ROOT}/src/ui/TouchLayout.cpp
+      ${TEST_HELPERS}
+    )
+    target_include_directories(${TEST_NAME} BEFORE PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/unit/games/mocks
+    )
+    target_include_directories(${TEST_NAME} PRIVATE
+      ${PROJECT_ROOT}/lib/Epub/src
+      ${PROJECT_ROOT}/lib/expat/src
+      ${PROJECT_ROOT}/lib/Fb2/src
+      ${PROJECT_ROOT}/lib/Html/src
+      ${PROJECT_ROOT}/lib/I18n/src
+      ${PROJECT_ROOT}/lib/BatteryMonitor/include
+      ${PROJECT_ROOT}/lib/Xtc/src
+      ${PROJECT_ROOT}/lib/Xtc/src/Xtc
+    )
+    target_compile_definitions(${TEST_NAME} PRIVATE PAPYRIX_TARGET_X4PRO=1)
+    # Elements.cpp includes unrelated reader helpers. Discard unused sections
+    # so this focused app test does not need their firmware services.
+    if(MSVC)
+      target_compile_options(${TEST_NAME} PRIVATE /Gy /Gw)
+      target_link_options(${TEST_NAME} PRIVATE /OPT:REF)
+    else()
+      target_compile_options(${TEST_NAME} PRIVATE -ffunction-sections -fdata-sections)
+      if(APPLE)
+        target_link_options(${TEST_NAME} PRIVATE -Wl,-dead_strip)
+      else()
+        target_link_options(${TEST_NAME} PRIVATE -Wl,--gc-sections)
+      endif()
+    endif()
+  elseif(TEST_NAME STREQUAL "GameModelsTest")
+    add_executable(${TEST_NAME}
+      ${TEST_SRC}
+      ${PROJECT_ROOT}/src/apps/GameModels.cpp
+      ${TEST_HELPERS}
+    )
   else()
     add_executable(${TEST_NAME} ${TEST_SRC} ${TEST_HELPERS})
   endif()

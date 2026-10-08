@@ -1,4 +1,21 @@
-# PapyriX
+# PapyriX Game Mod
+
+This fork of [bigbag/papyrix-reader](https://github.com/bigbag/papyrix-reader),
+based on PapyriX **v1.31.0**, adds offline **2048**, **Snake**, and **Falling Blocks**
+to **Apps > Games**. It includes pause/restart controls, slow and turn-based play,
+physical-button controls, and touch controls for the X4 Pro.
+
+The primary device for this mod is the **Xteink X4 Pro (ESP32-S3)**. Build its
+firmware with `pio run -e release_x4pro`; the image is
+`.pio/build/release_x4pro/firmware.bin`. For X3/X4 (ESP32-C3), use
+`pio run -e release_xteink_c3`. These images target different chips; choose the
+image for your device.
+
+See [game controls](docs/games.md) and the upstream [firmware update instructions](docs/user_guide.md).
+Both firmware targets compiled successfully. Validation includes 102 game-model
+and game-interface checks plus 56 existing navigation/input checks.
+
+The project retains the upstream MIT license and documentation below.
 
 [![Changelog](https://img.shields.io/badge/changelog-CHANGELOG.md-blue)](CHANGELOG.md)
 [![User Guide](https://img.shields.io/badge/docs-User_Guide-green)](docs/user_guide.md)
@@ -80,6 +97,9 @@ devices does not reuse incompatible rendered pages.
 - [x] Sunlight fading fix (powers down the display after refresh to prevent UV fade)
 - [x] Turbo LUTs with LUT cache for faster X3 page turns
 - [x] 4 screen orientations
+
+### Games
+- [x] Offline games: 2048, Snake, and Falling Blocks, with button and X4 Pro touch controls ([controls](docs/games.md))
 
 ### Customization
 - [x] Custom themes from the SD card (`/config/themes/`)
